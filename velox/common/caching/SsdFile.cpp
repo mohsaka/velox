@@ -403,6 +403,12 @@ void SsdFile::write(std::vector<CachePin>& pins) {
       // entries are unchanged.
       return;
     }
+    VELOX_SSD_CACHE_LOG(ERROR)
+        << "Successfully wrote to SSD, file name: " << fileName_
+        << ", fd: " << fd_ << ", size: " << iovecs.size()
+        << ", offset: " << offset << ", error code: " << errno
+        << ", error string: " << folly::errnoStr(errno);
+    ++stats_.writeSsdErrors;
 
     {
       std::lock_guard<std::shared_mutex> l(mutex_);
