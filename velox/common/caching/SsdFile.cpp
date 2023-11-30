@@ -397,7 +397,7 @@ void SsdFile::write(std::vector<CachePin>& pins) {
           << "Failed to write to SSD, file name: " << fileName_
           << ", fd: " << fd_ << ", size: " << iovecs.size()
           << ", offset: " << offset << ", error code: " << errno
-          << ", error string: " << folly::errnoStr(errno);
+          << ", error string: " << folly::errnoStr(errno) << "rc" << rc;
       ++stats_.writeSsdErrors;
       // If write fails, we return without adding the pins to the cache. The
       // entries are unchanged.
