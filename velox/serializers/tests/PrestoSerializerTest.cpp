@@ -18,6 +18,8 @@
 #include <gtest/gtest.h>
 #include <vector>
 #include "velox/common/base/tests/GTestUtils.h"
+#include "velox/common/memory/ByteStream.h"
+#include "velox/common/time/Timer.h"
 #include "velox/functions/prestosql/types/TimestampWithTimeZoneType.h"
 #include "velox/vector/fuzzer/VectorFuzzer.h"
 #include "velox/vector/tests/utils/VectorTestBase.h"
@@ -25,12 +27,18 @@
 using namespace facebook::velox;
 using namespace facebook::velox::test;
 
+struct SerializeStats {
+  int64_t actualSize{0};
+  int64_t estimatedSize{0};
+};
+
 class PrestoSerializerTest
     : public ::testing::TestWithParam<common::CompressionKind>,
       public VectorTestBase {
  protected:
   static void SetUpTestCase() {
     serializer::presto::PrestoVectorSerde::registerVectorSerde();
+    memory::MemoryManager::testingSetInstance({});
   }
 
   void SetUp() override {
@@ -38,6 +46,7 @@ class PrestoSerializerTest
   }
 
   void sanityCheckEstimateSerializedSize(const RowVectorPtr& rowVector) {
+    Scratch scratch;
     const auto numRows = rowVector->size();
 
     std::vector<IndexRange> rows(numRows);
@@ -51,7 +60,10 @@ class PrestoSerializerTest
       rawRowSizes[i] = &rowSizes[i];
     }
     serde_->estimateSerializedSize(
-        rowVector, folly::Range(rows.data(), numRows), rawRowSizes.data());
+        rowVector,
+        folly::Range(rows.data(), numRows),
+        rawRowSizes.data(),
+        scratch);
   }
 
   serializer::presto::PrestoVectorSerde::PrestoOptions getParamSerdeOptions(
@@ -65,11 +77,12 @@ class PrestoSerializerTest
     return paramOptions;
   }
 
-  void serialize(
+  SerializeStats serialize(
       const RowVectorPtr& rowVector,
       std::ostream* output,
-      const serializer::presto::PrestoVectorSerde::PrestoOptions*
-          serdeOptions) {
+      const serializer::presto::PrestoVectorSerde::PrestoOptions* serdeOptions,
+      std::optional<folly::Range<const IndexRange*>> indexRanges = std::nullopt,
+      std::optional<folly::Range<const vector_size_t*>> rows = std::nullopt) {
     auto streamInitialSize = output->tellp();
     sanityCheckEstimateSerializedSize(rowVector);
 
@@ -79,17 +92,44 @@ class PrestoSerializerTest
     auto paramOptions = getParamSerdeOptions(serdeOptions);
     auto serializer =
         serde_->createSerializer(rowType, numRows, arena.get(), &paramOptions);
+    vector_size_t sizeEstimate = 0;
 
-    serializer->append(rowVector);
+    Scratch scratch;
+    if (indexRanges.has_value()) {
+      raw_vector<vector_size_t*> sizes(indexRanges.value().size());
+      std::fill(sizes.begin(), sizes.end(), &sizeEstimate);
+      serde_->estimateSerializedSize(
+          rowVector, indexRanges.value(), sizes.data(), scratch);
+      serializer->append(rowVector, indexRanges.value(), scratch);
+    } else if (rows.has_value()) {
+      raw_vector<vector_size_t*> sizes(rows.value().size());
+      std::fill(sizes.begin(), sizes.end(), &sizeEstimate);
+      serde_->estimateSerializedSize(
+          rowVector, rows.value(), sizes.data(), scratch);
+      serializer->append(rowVector, rows.value(), scratch);
+    } else {
+      vector_size_t* sizes = &sizeEstimate;
+      IndexRange range{0, rowVector->size()};
+      serde_->estimateSerializedSize(
+          rowVector,
+          folly::Range<const IndexRange*>(&range, 1),
+          &sizes,
+          scratch);
+      serializer->append(rowVector);
+    }
     auto size = serializer->maxSerializedSize();
+    auto estimatePct = (100.0 * sizeEstimate) / static_cast<float>(size + 1);
+    LOG(INFO) << "Size=" << size << " estimate=" << sizeEstimate << " "
+              << estimatePct << "%";
     facebook::velox::serializer::presto::PrestoOutputStreamListener listener;
     OStreamOutputStream out(output, &listener);
     serializer->flush(&out);
     if (paramOptions.compressionKind == common::CompressionKind_NONE) {
-      ASSERT_EQ(size, out.tellp() - streamInitialSize);
+      EXPECT_EQ(size, out.tellp() - streamInitialSize);
     } else {
-      ASSERT_GE(size, out.tellp() - streamInitialSize);
+      EXPECT_GE(size, out.tellp() - streamInitialSize);
     }
+    return {static_cast<int64_t>(size), sizeEstimate};
   }
 
   ByteInputStream toByteStream(const std::string& input) {
@@ -125,6 +165,17 @@ class PrestoSerializerTest
     std::vector<VectorPtr> childVectors = {a, b, c};
 
     return makeRowVector(childVectors);
+  }
+
+  RowVectorPtr wrapChildren(const RowVectorPtr& row) {
+    auto children = row->children();
+    std::vector<VectorPtr> newChildren = children;
+    auto indices = makeIndices(row->size(), [](auto row) { return row; });
+    for (auto& child : newChildren) {
+      child = BaseVector::wrapInDictionary(
+          BufferPtr(nullptr), indices, row->size(), child);
+    }
+    return makeRowVector(newChildren);
   }
 
   void testRoundTrip(
@@ -164,6 +215,40 @@ class PrestoSerializerTest
     }
 
     assertEqualVectors(result, rowVector);
+
+    // Serialize the vector with even and odd rows in different partitions.
+    auto even =
+        makeIndices(rowVector->size() / 2, [&](auto row) { return row * 2; });
+    auto odd = makeIndices(
+        (rowVector->size() - 1) / 2, [&](auto row) { return (row * 2) + 1; });
+    testSerializeRows(rowVector, even, serdeOptions);
+    auto oddStats = testSerializeRows(rowVector, odd, serdeOptions);
+    auto wrappedRowVector = wrapChildren(rowVector);
+    auto wrappedStats = testSerializeRows(wrappedRowVector, odd, serdeOptions);
+    EXPECT_EQ(oddStats.estimatedSize, wrappedStats.estimatedSize);
+    EXPECT_EQ(oddStats.actualSize, wrappedStats.actualSize);
+  }
+
+  SerializeStats testSerializeRows(
+      const RowVectorPtr& rowVector,
+      BufferPtr indices,
+      const serializer::presto::PrestoVectorSerde::PrestoOptions*
+          serdeOptions) {
+    std::ostringstream out;
+    auto rows = folly::Range<const vector_size_t*>(
+        indices->as<vector_size_t>(), indices->size() / sizeof(vector_size_t));
+    auto stats = serialize(rowVector, &out, serdeOptions, std::nullopt, rows);
+
+    auto rowType = asRowType(rowVector->type());
+    auto deserialized = deserialize(rowType, out.str(), serdeOptions);
+    assertEqualVectors(
+        deserialized,
+        BaseVector::wrapInDictionary(
+            BufferPtr(nullptr),
+            indices,
+            indices->size() / sizeof(vector_size_t),
+            rowVector));
+    return stats;
   }
 
   void serializeEncoded(
@@ -522,12 +607,19 @@ TEST_P(PrestoSerializerTest, roundTrip) {
       VectorFuzzer::Options::TimestampPrecision::kMilliSeconds;
   opts.nullRatio = 0.1;
   VectorFuzzer fuzzer(opts, pool_.get());
+  VectorFuzzer::Options nonNullOpts;
+  nonNullOpts.timestampPrecision =
+      VectorFuzzer::Options::TimestampPrecision::kMilliSeconds;
+  nonNullOpts.nullRatio = 0;
+  VectorFuzzer nonNullFuzzer(nonNullOpts, pool_.get());
 
   const size_t numRounds = 20;
 
   for (size_t i = 0; i < numRounds; ++i) {
     auto rowType = fuzzer.randRowType();
-    auto inputRowVector = fuzzer.fuzzInputRow(rowType);
+
+    auto inputRowVector = (i % 2 == 0) ? fuzzer.fuzzInputRow(rowType)
+                                       : nonNullFuzzer.fuzzInputRow(rowType);
     testRoundTrip(inputRowVector);
   }
 }

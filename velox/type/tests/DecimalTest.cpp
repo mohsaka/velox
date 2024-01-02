@@ -60,7 +60,7 @@ TEST(DecimalTest, decimalToString) {
   ASSERT_EQ("1.000", DecimalUtil::toString(1000, DECIMAL(20, 3)));
   ASSERT_EQ("0.0000001000", DecimalUtil::toString(1000, DECIMAL(20, 10)));
   ASSERT_EQ("-0.001000", DecimalUtil::toString(-1000, DECIMAL(20, 6)));
-  ASSERT_EQ("0", DecimalUtil::toString(0, DECIMAL(20, 9)));
+  ASSERT_EQ("0.000000000", DecimalUtil::toString(0, DECIMAL(20, 9)));
 
   const auto minShortDecimal =
       DecimalUtil::toString(DecimalUtil::kShortDecimalMin, DECIMAL(18, 0));
@@ -191,6 +191,22 @@ TEST(DecimalTest, valueInPrecisionRange) {
       DecimalUtil::kLongDecimalMax + 1, LongDecimalType::kMaxPrecision));
   ASSERT_FALSE(DecimalUtil::valueInPrecisionRange<int128_t>(
       DecimalUtil::kLongDecimalMin - 1, LongDecimalType::kMaxPrecision));
+}
+
+TEST(DecimalTest, computeAverage) {
+  auto validateSameValues = [](int128_t value, int64_t maxCount) {
+    SCOPED_TRACE(fmt::format("value={} maxCount={}", value, maxCount));
+    int128_t sum = 0;
+    int64_t overflow = 0;
+    for (int64_t i = 1; i <= maxCount; ++i) {
+      overflow += DecimalUtil::addWithOverflow(sum, sum, value);
+      int128_t avg;
+      DecimalUtil::computeAverage(avg, sum, i, overflow);
+      ASSERT_EQ(avg, value);
+    }
+  };
+  validateSameValues(DecimalUtil::kLongDecimalMin, 1'000'000);
+  validateSameValues(DecimalUtil::kLongDecimalMax, 1'000'000);
 }
 
 TEST(DecimalAggregateTest, adjustSumForOverflow) {

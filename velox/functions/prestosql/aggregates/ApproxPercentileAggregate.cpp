@@ -828,8 +828,9 @@ void addSignatures(
 
 } // namespace
 
-exec::AggregateRegistrationResult registerApproxPercentileAggregate(
-    const std::string& prefix) {
+void registerApproxPercentileAggregate(
+    const std::string& prefix,
+    bool withCompanionFunctions) {
   std::vector<std::shared_ptr<exec::AggregateFunctionSignature>> signatures;
   for (const auto& inputType :
        {"tinyint", "smallint", "integer", "bigint", "real", "double"}) {
@@ -841,7 +842,7 @@ exec::AggregateRegistrationResult registerApproxPercentileAggregate(
         signatures);
   }
   auto name = prefix + kApproxPercentile;
-  return exec::registerAggregateFunction(
+  exec::registerAggregateFunction(
       name,
       std::move(signatures),
       [name](
@@ -929,7 +930,7 @@ exec::AggregateRegistrationResult registerApproxPercentileAggregate(
                 type->toString());
         }
       },
-      /*registerCompanionFunctions*/ true);
+      withCompanionFunctions);
 }
 
 } // namespace facebook::velox::aggregate::prestosql

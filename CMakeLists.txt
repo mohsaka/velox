@@ -75,7 +75,6 @@ set(VELOX_DEPENDENCY_SOURCE
       STRING
       "Default source for all dependencies with source builds enabled: AUTO SYSTEM BUNDLED."
 )
-option(VELOX_ENABLE_DUCKDB "Build duckDB to enable differential testing." ON)
 option(VELOX_ENABLE_EXEC "Build exec." ON)
 option(VELOX_ENABLE_AGGREGATES "Build aggregates." ON)
 option(VELOX_ENABLE_HIVE_CONNECTOR "Build Hive connector." ON)
@@ -83,7 +82,6 @@ option(VELOX_ENABLE_TPCH_CONNECTOR "Build TPC-H connector." ON)
 option(VELOX_ENABLE_PRESTO_FUNCTIONS "Build Presto SQL functions." ON)
 option(VELOX_ENABLE_SPARK_FUNCTIONS "Build Spark SQL functions." ON)
 option(VELOX_ENABLE_EXPRESSION "Build expression." ON)
-option(VELOX_ENABLE_PARSE "Build parser used for unit tests." ON)
 option(VELOX_ENABLE_EXAMPLES
        "Build examples. This will enable VELOX_ENABLE_EXPRESSION automatically."
        OFF)
@@ -101,7 +99,6 @@ option(VELOX_ENABLE_CCACHE "Use ccache if installed." ON)
 
 option(VELOX_BUILD_TEST_UTILS "Builds Velox test utilities" OFF)
 option(VELOX_BUILD_PYTHON_PACKAGE "Builds Velox Python bindings" OFF)
-option(VELOX_BUILD_BENCHMARKS "Builds Velox benchmarks" OFF)
 option(
   VELOX_ENABLE_INT64_BUILD_PARTITION_BOUND
   "make buildPartitionBounds_ a vector int64 instead of int32 to avoid integer overflow when the hashtable has billions of records"
@@ -117,9 +114,7 @@ if(${VELOX_BUILD_MINIMAL})
   # Enable and disable components for velox base build
   set(VELOX_BUILD_TESTING OFF)
   set(VELOX_ENABLE_PRESTO_FUNCTIONS ON)
-  set(VELOX_ENABLE_DUCKDB OFF)
   set(VELOX_ENABLE_EXPRESSION ON)
-  set(VELOX_ENABLE_PARSE OFF)
   set(VELOX_ENABLE_EXEC OFF)
   set(VELOX_ENABLE_AGGREGATES OFF)
   set(VELOX_ENABLE_HIVE_CONNECTOR OFF)
@@ -136,7 +131,6 @@ endif()
 if(${VELOX_BUILD_TESTING})
   # Enable all components to build testing binaries
   set(VELOX_ENABLE_PRESTO_FUNCTIONS ON)
-  set(VELOX_ENABLE_DUCKDB ON)
   set(VELOX_ENABLE_EXPRESSION ON)
   set(VELOX_ENABLE_PARSE ON)
   set(VELOX_ENABLE_EXEC ON)
@@ -147,23 +141,15 @@ if(${VELOX_BUILD_TESTING})
   set(VELOX_ENABLE_EXAMPLES ON)
 endif()
 
-if(${VELOX_ENABLE_EXAMPLES})
-  set(VELOX_ENABLE_EXPRESSION ON)
-endif()
-
-if(${VELOX_BUILD_BENCHMARKS})
-  set(VELOX_ENABLE_BENCHMARKS ON)
-  set(VELOX_ENABLE_BENCHMARKS_BASIC ON)
+if(VELOX_BUILD_TESTING OR VELOX_BUILD_TEST_UTILS)
+  set(cpr_SOURCE BUNDLED)
+  resolve_dependency(cpr)
   set(VELOX_ENABLE_DUCKDB ON)
   set(VELOX_ENABLE_PARSE ON)
-  set(VELOX_ENABLE_PARQUET ON)
-  set(VELOX_BUILD_TEST_UTILS ON)
-  set(VELOX_BUILD_TESTING OFF)
-  set(VELOX_ENABLE_EXAMPLES OFF)
-  set(VELOX_ENABLE_GCS OFF)
-  set(VELOX_ENABLE_ABFS OFF)
-  set(VELOX_ENABLE_SUBSTRAIT OFF)
-  set(VELOX_CODEGEN_SUPPORT OFF)
+endif()
+
+if(${VELOX_ENABLE_EXAMPLES})
+  set(VELOX_ENABLE_EXPRESSION ON)
 endif()
 
 if(${VELOX_BUILD_PYTHON_PACKAGE})
@@ -238,7 +224,8 @@ if(VELOX_ENABLE_ABFS)
   if(AZURESDK_ROOT_DIR)
     list(APPEND CMAKE_PREFIX_PATH ${AZURESDK_ROOT_DIR})
   endif()
-  find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+  # files-datalake is built on blobs
+  find_package(azure-storage-files-datalake-cpp CONFIG REQUIRED)
   add_definitions(-DVELOX_ENABLE_ABFS)
 endif()
 
@@ -421,6 +408,11 @@ else()
 endif()
 resolve_dependency(glog)
 
+if(${VELOX_ENABLE_DUCKDB})
+  set_source(DuckDB)
+  resolve_dependency(DuckDB)
+endif()
+
 set_source(fmt)
 resolve_dependency(fmt)
 
@@ -474,11 +466,14 @@ endif()
 if("${CMAKE_CXX_COMPILER_ID}" MATCHES "GNU")
   set(FILESYSTEM "stdc++fs")
 
-  # Ensure we have gcc at least 8+.
-  if(CMAKE_CXX_COMPILER_VERSION LESS 8.0)
+  # Ensure we have gcc at least 9+.
+  if(CMAKE_CXX_COMPILER_VERSION LESS 9.0)
     message(
-      FATAL_ERROR "VELOX requires gcc > 8. Found ${CMAKE_CXX_COMPILER_VERSION}")
+      FATAL_ERROR "VELOX requires gcc > 9. Found ${CMAKE_CXX_COMPILER_VERSION}")
   endif()
+
+  # Find Threads library
+  find_package(Threads REQUIRED)
 else()
   set(FILESYSTEM "")
 endif()
@@ -527,8 +522,6 @@ find_package(FLEX 2.5.13 REQUIRED)
 
 include_directories(SYSTEM velox)
 include_directories(SYSTEM velox/external)
-include_directories(SYSTEM velox/external/duckdb)
-include_directories(SYSTEM velox/external/duckdb/tpch/dbgen/include)
 
 # these were previously vendored in third-party/
 if(NOT VELOX_DISABLE_GOOGLETEST)
@@ -543,11 +536,9 @@ set(xsimd_SOURCE BUNDLED)
 resolve_dependency(xsimd)
 
 if(VELOX_BUILD_TESTING)
-  set(cpr_SOURCE BUNDLED)
-  resolve_dependency(cpr)
+  set(BUILD_TESTING ON)
+  include(CTest) # include after project() but before add_subdirectory()
 endif()
-
-include(CTest) # include after project() but before add_subdirectory()
 
 include_directories(.)
 

@@ -42,9 +42,24 @@ class SortBufferTest : public OperatorTestBase {
     rng_.seed(123);
   }
 
-  common::SpillConfig getSpillConfig(const std::string& spillFilePath) const {
+  common::SpillConfig getSpillConfig(const std::string& spillDir) const {
     return common::SpillConfig(
-        spillFilePath, 0, 0, 0, executor_.get(), 5, 10, 0, 0, 0, 0, 0, "none");
+        [&]() -> const std::string& { return spillDir; },
+        [&](uint64_t) {},
+        "0.0.0",
+        0,
+        0,
+        0,
+        executor_.get(),
+        5,
+        10,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        "none");
   }
 
   const RowTypePtr inputType_ = ROW(
@@ -62,15 +77,14 @@ class SortBufferTest : public OperatorTestBase {
 
   const int64_t maxBytes_ = 20LL << 20; // 20 MB
   const std::shared_ptr<memory::MemoryPool> rootPool_{
-      memory::defaultMemoryManager().addRootPool("SortBufferTest", maxBytes_)};
+      memory::memoryManager()->addRootPool("SortBufferTest", maxBytes_)};
   const std::shared_ptr<memory::MemoryPool> pool_{
       rootPool_->addLeafChild("SortBufferTest", maxBytes_)};
   const std::shared_ptr<folly::Executor> executor_{
       std::make_shared<folly::CPUThreadPoolExecutor>(
           std::thread::hardware_concurrency())};
-  tsan_atomic<bool> nonReclaimableSection_{false};
-  uint32_t numSpillRuns_;
 
+  tsan_atomic<bool> nonReclaimableSection_{false};
   folly::Random::DefaultGenerator rng_;
 };
 
@@ -111,8 +125,7 @@ TEST_F(SortBufferTest, singleKey) {
         sortColumnIndices_,
         testData.sortCompareFlags,
         pool_.get(),
-        &nonReclaimableSection_,
-        &numSpillRuns_);
+        &nonReclaimableSection_);
 
     RowVectorPtr data = makeRowVector(
         {makeFlatVector<int64_t>({1, 2, 3, 4, 5}),
@@ -142,8 +155,7 @@ TEST_F(SortBufferTest, multipleKeys) {
       sortColumnIndices_,
       sortCompareFlags_,
       pool_.get(),
-      &nonReclaimableSection_,
-      &numSpillRuns_);
+      &nonReclaimableSection_);
 
   RowVectorPtr data = makeRowVector(
       {makeFlatVector<int64_t>({1, 2, 3, 4, 5}),
@@ -223,11 +235,10 @@ TEST_F(SortBufferTest, DISABLED_randomData) {
         testData.sortColumnIndices,
         testData.sortCompareFlags,
         pool_.get(),
-        &nonReclaimableSection_,
-        &numSpillRuns_);
+        &nonReclaimableSection_);
 
     const std::shared_ptr<memory::MemoryPool> fuzzerPool =
-        memory::addDefaultLeafMemoryPool("VectorFuzzer");
+        memory::memoryManager()->addLeafPool("VectorFuzzer");
 
     std::vector<RowVectorPtr> inputVectors;
     inputVectors.reserve(3);
@@ -274,15 +285,17 @@ TEST_F(SortBufferTest, batchOutput) {
   for (const auto& testData : testSettings) {
     SCOPED_TRACE(testData.debugString());
     auto spillDirectory = exec::test::TempDirectoryPath::create();
-    auto filePath = makeOperatorSpillPath(spillDirectory->path, 0, 0, 0);
     auto spillConfig = common::SpillConfig(
-        filePath,
+        [&]() -> const std::string& { return spillDirectory->path; },
+        [&](uint64_t) {},
+        "0.0.0",
         1000,
         0,
         1000,
         executor_.get(),
         5,
         10,
+        0,
         0,
         0,
         0,
@@ -295,13 +308,12 @@ TEST_F(SortBufferTest, batchOutput) {
         sortCompareFlags_,
         pool_.get(),
         &nonReclaimableSection_,
-        &numSpillRuns_,
         testData.triggerSpill ? &spillConfig : nullptr,
         0);
     ASSERT_EQ(sortBuffer->canSpill(), testData.triggerSpill);
 
     const std::shared_ptr<memory::MemoryPool> fuzzerPool =
-        memory::addDefaultLeafMemoryPool("VectorFuzzer");
+        memory::memoryManager()->addLeafPool("VectorFuzzer");
 
     std::vector<RowVectorPtr> inputVectors;
     inputVectors.reserve(testData.numInputRows.size());
@@ -355,7 +367,10 @@ TEST_F(SortBufferTest, spill) {
     }
   } testSettings[] = {
       {false, true, 0, false}, // spilling is not enabled.
-      {true, true, 0, true}, // memory reservation failure triggers spilling.
+      {true,
+       true,
+       0,
+       false}, // memory reservation failure won't trigger spilling.
       {true, false, 1000, true}, // threshold is small, spilling is triggered.
       {true, false, 1000000, false} // threshold is too large, not triggered
   };
@@ -363,20 +378,22 @@ TEST_F(SortBufferTest, spill) {
   for (const auto& testData : testSettings) {
     SCOPED_TRACE(testData.debugString());
     auto spillDirectory = exec::test::TempDirectoryPath::create();
-    auto filePath = makeOperatorSpillPath(spillDirectory->path, 0, 0, 0);
     // memory pool limit is 20M
     // Set 'kSpillableReservationGrowthPct' to an extreme large value to trigger
     // memory reservation failure and thus trigger disk spilling.
     auto spillableReservationGrowthPct =
         testData.memoryReservationFailure ? 100000 : 100;
     auto spillConfig = common::SpillConfig(
-        filePath,
+        [&]() -> const std::string& { return spillDirectory->path; },
+        [&](uint64_t) {},
+        "0.0.0",
         1000,
         0,
         1000,
         executor_.get(),
         100,
         spillableReservationGrowthPct,
+        0,
         0,
         0,
         0,
@@ -389,12 +406,11 @@ TEST_F(SortBufferTest, spill) {
         sortCompareFlags_,
         pool_.get(),
         &nonReclaimableSection_,
-        &numSpillRuns_,
         testData.spillEnabled ? &spillConfig : nullptr,
         testData.spillMemoryThreshold);
 
     const std::shared_ptr<memory::MemoryPool> fuzzerPool =
-        memory::addDefaultLeafMemoryPool("spillSource");
+        memory::memoryManager()->addLeafPool("spillSource");
     VectorFuzzer fuzzer({.vectorSize = 1024}, fuzzerPool.get());
     uint64_t totalNumInput = 0;
 
@@ -407,7 +423,7 @@ TEST_F(SortBufferTest, spill) {
       totalNumInput += 1024;
     }
     sortBuffer->noMoreInput();
-    auto spillStats = sortBuffer->spilledStats();
+    const auto spillStats = sortBuffer->spilledStats();
 
     if (!testData.spillTriggered) {
       ASSERT_FALSE(spillStats.has_value());
@@ -437,20 +453,18 @@ TEST_F(SortBufferTest, spill) {
 
 TEST_F(SortBufferTest, emptySpill) {
   const std::shared_ptr<memory::MemoryPool> fuzzerPool =
-      memory::addDefaultLeafMemoryPool("emptySpillSource");
+      memory::memoryManager()->addLeafPool("emptySpillSource");
 
   for (bool hasPostSpillData : {false, true}) {
     SCOPED_TRACE(fmt::format("hasPostSpillData {}", hasPostSpillData));
     auto spillDirectory = exec::test::TempDirectoryPath::create();
-    auto filePath = makeOperatorSpillPath(spillDirectory->path, 0, 0, 0);
-    auto spillConfig = getSpillConfig(filePath);
+    auto spillConfig = getSpillConfig(spillDirectory->path);
     auto sortBuffer = std::make_unique<SortBuffer>(
         inputType_,
         sortColumnIndices_,
         sortCompareFlags_,
         pool_.get(),
         &nonReclaimableSection_,
-        &numSpillRuns_,
         &spillConfig,
         0);
 

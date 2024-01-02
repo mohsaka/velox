@@ -16,8 +16,11 @@
 
 #include "velox/common/memory/MemoryPool.h"
 
+#include <signal.h>
 #include <set>
 
+#include "velox/common/base/Counters.h"
+#include "velox/common/base/StatsReporter.h"
 #include "velox/common/base/SuccinctPrinter.h"
 #include "velox/common/memory/Memory.h"
 #include "velox/common/testutil/TestValue.h"
@@ -60,18 +63,24 @@ namespace {
 struct MemoryUsage {
   std::string name;
   uint64_t currentUsage;
+  uint64_t reservedUsage;
   uint64_t peakUsage;
 
   bool operator>(const MemoryUsage& other) const {
-    return std::tie(currentUsage, peakUsage, name) >
-        std::tie(other.currentUsage, other.peakUsage, other.name);
+    return std::tie(currentUsage, reservedUsage, peakUsage, name) >
+        std::tie(
+               other.currentUsage,
+               other.reservedUsage,
+               other.peakUsage,
+               other.name);
   }
 
   std::string toString() const {
     return fmt::format(
-        "{} usage {} peak {}",
+        "{} usage {} reserved {} peak {}",
         name,
         succinctBytes(currentUsage),
+        succinctBytes(reservedUsage),
         succinctBytes(peakUsage));
   }
 };
@@ -112,6 +121,7 @@ void treeMemoryUsageVisitor(
   const MemoryUsage usage{
       .name = pool->name(),
       .currentUsage = stats.currentBytes,
+      .reservedUsage = stats.reservedBytes,
       .peakUsage = stats.peakBytes,
   };
   out << std::string(indent, ' ') << usage.toString() << "\n";
@@ -151,8 +161,9 @@ std::string capacityToString(int64_t capacity) {
 
 std::string MemoryPool::Stats::toString() const {
   return fmt::format(
-      "currentBytes:{} peakBytes:{} cumulativeBytes:{} numAllocs:{} numFrees:{} numReserves:{} numReleases:{} numShrinks:{} numReclaims:{} numCollisions:{}",
+      "currentBytes:{} reservedBytes:{} peakBytes:{} cumulativeBytes:{} numAllocs:{} numFrees:{} numReserves:{} numReleases:{} numShrinks:{} numReclaims:{} numCollisions:{}",
       succinctBytes(currentBytes),
+      succinctBytes(reservedBytes),
       succinctBytes(peakBytes),
       succinctBytes(cumulativeBytes),
       numAllocs,
@@ -167,6 +178,7 @@ std::string MemoryPool::Stats::toString() const {
 bool MemoryPool::Stats::operator==(const MemoryPool::Stats& other) const {
   return std::tie(
              currentBytes,
+             reservedBytes,
              peakBytes,
              cumulativeBytes,
              numAllocs,
@@ -176,6 +188,7 @@ bool MemoryPool::Stats::operator==(const MemoryPool::Stats& other) const {
              numCollisions) ==
       std::tie(
              other.currentBytes,
+             other.reservedBytes,
              other.peakBytes,
              other.cumulativeBytes,
              other.numAllocs,
@@ -201,8 +214,8 @@ MemoryPool::MemoryPool(
       maxCapacity_(parent_ == nullptr ? options.maxCapacity : kMaxMemory),
       trackUsage_(options.trackUsage),
       threadSafe_(options.threadSafe),
-      checkUsageLeak_(options.checkUsageLeak),
-      debugEnabled_(options.debugEnabled) {
+      debugEnabled_(options.debugEnabled),
+      coreOnAllocationFailureEnabled_(options.coreOnAllocationFailureEnabled) {
   VELOX_CHECK(!isRoot() || !isLeaf());
   VELOX_CHECK_GT(
       maxCapacity_, 0, "Memory pool {} max capacity can't be zero", name_);
@@ -365,11 +378,13 @@ MemoryPoolImpl::MemoryPoolImpl(
     Kind kind,
     std::shared_ptr<MemoryPool> parent,
     std::unique_ptr<MemoryReclaimer> reclaimer,
+    GrowCapacityCallback growCapacityCb,
     DestructionCallback destructionCb,
     const Options& options)
     : MemoryPool{name, kind, parent, options},
       manager_{memoryManager},
-      allocator_{&manager_->allocator()},
+      allocator_{manager_->allocator()},
+      growCapacityCb_(std::move(growCapacityCb)),
       destructionCb_(std::move(destructionCb)),
       debugPoolNameRegex_(debugEnabled_ ? *(debugPoolNameRegex().rlock()) : ""),
       reclaimer_(std::move(reclaimer)),
@@ -385,6 +400,10 @@ MemoryPoolImpl::MemoryPoolImpl(
       "Child memory pool {} shall only set memory reclaimer if its parent {} has also set",
       name_,
       parent_->name());
+  VELOX_CHECK(
+      isRoot() || (destructionCb_ == nullptr && growCapacityCb_ == nullptr),
+      "Only root memory pool allows to set destruction and capacity grow callbacks: {}",
+      name_);
 }
 
 MemoryPoolImpl::~MemoryPoolImpl() {
@@ -392,13 +411,26 @@ MemoryPoolImpl::~MemoryPoolImpl() {
   if (parent_ != nullptr) {
     toImpl(parent_)->dropChild(this);
   }
-  if (checkUsageLeak_) {
-    VELOX_CHECK(
-        (usedReservationBytes_ == 0) && (reservationBytes_ == 0) &&
-            (minReservationBytes_ == 0),
-        "Bad memory usage track state: {}",
-        toString());
+
+  if (isLeaf()) {
+    if (usedReservationBytes_ > 0) {
+      LOG(ERROR) << "Memory leak (Used memory): " << toString();
+      RECORD_METRIC_VALUE(
+          kMetricMemoryPoolUsageLeakBytes, usedReservationBytes_);
+    }
+
+    if (minReservationBytes_ > 0) {
+      LOG(ERROR) << "Memory leak (Reserved Memory): " << toString();
+      RECORD_METRIC_VALUE(
+          kMetricMemoryPoolReservationLeakBytes, minReservationBytes_);
+    }
   }
+  VELOX_DCHECK(
+      (usedReservationBytes_ == 0) && (reservationBytes_ == 0) &&
+          (minReservationBytes_ == 0),
+      "Bad memory usage track state: {}",
+      toString());
+
   if (destructionCb_ != nullptr) {
     destructionCb_(this);
   }
@@ -412,6 +444,7 @@ MemoryPool::Stats MemoryPoolImpl::stats() const {
 MemoryPool::Stats MemoryPoolImpl::statsLocked() const {
   Stats stats;
   stats.currentBytes = currentBytesLocked();
+  stats.reservedBytes = reservationBytes_;
   stats.peakBytes = peakBytes_;
   stats.cumulativeBytes = cumulativeBytes_;
   stats.numAllocs = numAllocs_;
@@ -429,7 +462,7 @@ void* MemoryPoolImpl::allocate(int64_t size) {
   void* buffer = allocator_->allocateBytes(alignedSize, alignment_);
   if (FOLLY_UNLIKELY(buffer == nullptr)) {
     release(alignedSize);
-    VELOX_MEM_ALLOC_ERROR(fmt::format(
+    handleAllocationFailure(fmt::format(
         "{} failed with {} from {} {}",
         __FUNCTION__,
         succinctBytes(size),
@@ -448,7 +481,7 @@ void* MemoryPoolImpl::allocateZeroFilled(int64_t numEntries, int64_t sizeEach) {
   void* buffer = allocator_->allocateZeroFilled(alignedSize);
   if (FOLLY_UNLIKELY(buffer == nullptr)) {
     release(alignedSize);
-    VELOX_MEM_ALLOC_ERROR(fmt::format(
+    handleAllocationFailure(fmt::format(
         "{} failed with {} entries and {} each from {} {}",
         __FUNCTION__,
         numEntries,
@@ -468,7 +501,7 @@ void* MemoryPoolImpl::reallocate(void* p, int64_t size, int64_t newSize) {
   void* newP = allocator_->allocateBytes(alignedNewSize, alignment_);
   if (FOLLY_UNLIKELY(newP == nullptr)) {
     release(alignedNewSize);
-    VELOX_MEM_ALLOC_ERROR(fmt::format(
+    handleAllocationFailure(fmt::format(
         "{} failed with new {} and old {} from {} {}",
         __FUNCTION__,
         succinctBytes(newSize),
@@ -517,7 +550,7 @@ void MemoryPoolImpl::allocateNonContiguous(
           },
           minSizeClass)) {
     VELOX_CHECK(out.empty());
-    VELOX_MEM_ALLOC_ERROR(fmt::format(
+    handleAllocationFailure(fmt::format(
         "{} failed with {} pages from {} {}",
         __FUNCTION__,
         numPages,
@@ -569,7 +602,7 @@ void MemoryPoolImpl::allocateContiguous(
           },
           maxPages)) {
     VELOX_CHECK(out.empty());
-    VELOX_MEM_ALLOC_ERROR(fmt::format(
+    handleAllocationFailure(fmt::format(
         "{} failed with {} pages from {} {}",
         __FUNCTION__,
         numPages,
@@ -602,7 +635,7 @@ void MemoryPoolImpl::growContiguous(
               release(allocBytes);
             }
           })) {
-    VELOX_MEM_ALLOC_ERROR(fmt::format(
+    handleAllocationFailure(fmt::format(
         "{} failed with {} pages from {} {}",
         __FUNCTION__,
         increment,
@@ -635,12 +668,13 @@ std::shared_ptr<MemoryPool> MemoryPoolImpl::genChild(
       parent,
       std::move(reclaimer),
       nullptr,
+      nullptr,
       Options{
           .alignment = alignment_,
           .trackUsage = trackUsage_,
           .threadSafe = threadSafe,
-          .checkUsageLeak = checkUsageLeak_,
-          .debugEnabled = debugEnabled_});
+          .debugEnabled = debugEnabled_,
+          .coreOnAllocationFailureEnabled = coreOnAllocationFailureEnabled_});
 }
 
 bool MemoryPoolImpl::maybeReserve(uint64_t increment) {
@@ -745,7 +779,7 @@ bool MemoryPoolImpl::incrementReservationThreadSafe(
   }
   VELOX_CHECK_NULL(parent_);
 
-  if (manager_->growPool(requestor, size)) {
+  if (growCapacityCb_(requestor, size)) {
     TestValue::adjust(
         "facebook::velox::memory::MemoryPoolImpl::incrementReservationThreadSafe::AfterGrowCallback",
         this);
@@ -870,6 +904,7 @@ std::string MemoryPoolImpl::treeMemoryUsage() const {
     const MemoryUsage usage{
         .name = name(),
         .currentUsage = stats.currentBytes,
+        .reservedUsage = stats.reservedBytes,
         .peakUsage = stats.peakBytes};
     out << usage.toString() << "\n";
   }
@@ -932,11 +967,12 @@ bool MemoryPoolImpl::reclaimableBytes(uint64_t& reclaimableBytes) const {
 
 uint64_t MemoryPoolImpl::reclaim(
     uint64_t targetBytes,
+    uint64_t maxWaitMs,
     memory::MemoryReclaimer::Stats& stats) {
   if (reclaimer() == nullptr) {
     return 0;
   }
-  return reclaimer()->reclaim(this, targetBytes, stats);
+  return reclaimer()->reclaim(this, targetBytes, maxWaitMs, stats);
 }
 
 void MemoryPoolImpl::enterArbitration() {
@@ -1134,5 +1170,21 @@ void MemoryPoolImpl::leakCheckDbg() {
         << allocationRecord.callStack;
   }
   VELOX_FAIL(buf.str());
+}
+
+void MemoryPoolImpl::handleAllocationFailure(
+    const std::string& failureMessage) {
+  if (coreOnAllocationFailureEnabled_) {
+    LOG(ERROR) << failureMessage;
+    // SIGBUS is one of the standard signals in Linux that triggers a core dump
+    // Normally it is raised by the operating system when a misaligned memory
+    // access occurs. On x86 and aarch64 misaligned access is allowed by default
+    // hence this signal should never occur naturally. Raising a signal other
+    // than SIGABRT makes it easier to distinguish an allocation failure from
+    // any other crash
+    raise(SIGBUS);
+  }
+
+  VELOX_MEM_ALLOC_ERROR(failureMessage);
 }
 } // namespace facebook::velox::memory

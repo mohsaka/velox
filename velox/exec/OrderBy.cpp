@@ -65,7 +65,6 @@ OrderBy::OrderBy(
       sortCompareFlags,
       pool(),
       &nonReclaimableSection_,
-      &numSpillRuns_,
       spillConfig_.has_value() ? &(spillConfig_.value()) : nullptr,
       operatorCtx_->driverCtx()->queryConfig().orderBySpillMemoryThreshold());
 }
@@ -79,24 +78,11 @@ void OrderBy::reclaim(
     memory::MemoryReclaimer::Stats& stats) {
   VELOX_CHECK(canReclaim());
   VELOX_CHECK(!nonReclaimableSection_);
-  auto* driver = operatorCtx_->driver();
 
-  // NOTE: an order by operator is reclaimable if it hasn't started output
-  // processing and is not under non-reclaimable execution section.
-  if (noMoreInput_) {
-    // TODO: reduce the log frequency if it is too verbose.
-    ++stats.numNonReclaimableAttempts;
-    LOG(WARNING)
-        << "Can't reclaim from order by operator which has started producing output: "
-        << pool()->name()
-        << ", usage: " << succinctBytes(pool()->currentBytes())
-        << ", reservation: " << succinctBytes(pool()->reservedBytes());
-    return;
-  }
-
-  // TODO: support fine-grain disk spilling based on 'targetBytes' after having
-  // row container memory compaction support later.
+  // TODO: support fine-grain disk spilling based on 'targetBytes' after
+  // having row container memory compaction support later.
   sortBuffer_->spill();
+
   // Release the minimum reserved memory.
   pool()->release();
 }
@@ -125,7 +111,7 @@ void OrderBy::abort() {
 
 void OrderBy::recordSpillStats() {
   VELOX_CHECK_NOT_NULL(sortBuffer_);
-  const auto spillStats = sortBuffer_->spilledStats();
+  auto spillStats = sortBuffer_->spilledStats();
   if (spillStats.has_value()) {
     Operator::recordSpillStats(spillStats.value());
   }
