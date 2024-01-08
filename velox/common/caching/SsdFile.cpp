@@ -393,7 +393,14 @@ void SsdFile::write(std::vector<CachePin>& pins) {
       ++numWritten;
     }
     VELOX_CHECK_GE(fileSize_, offset + bytes);
-
+    std::stringstream ss;
+    for(int i=0; i<iovecs.size(); ++i)
+      ss << std::hex << (int)(((char *)iovecs.data())[i]);
+    std::string mystr = ss.str();
+    VELOX_SSD_CACHE_LOG(ERROR)
+        << "Attempting to write to ssd" << fileName_
+        << ", size: " << iovecs.size()
+        << ", offset: " << offset << "data: \n" << mystr;
     const auto rc = folly::pwritev(fd_, iovecs.data(), iovecs.size(), offset);
     if (rc != bytes) {
       VELOX_SSD_CACHE_LOG(ERROR)
