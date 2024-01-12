@@ -389,32 +389,18 @@ void SsdFile::write(std::vector<CachePin>& pins) {
       ++numWritten;
     }
     VELOX_CHECK_GE(fileSize_, offset + bytes);
-    std::stringstream ss;
-    for(int i=0; i<iovecs.size(); ++i)
-      ss << std::hex << (int)(((char *)iovecs.data())[i]);
-    std::string mystr = ss.str();
-    VELOX_SSD_CACHE_LOG(ERROR)
-        << "Attempting to write to ssd" << fileName_
-        << ", size: " << iovecs.size()
-        << ", offset: " << offset << "data: \n" << mystr;
     const auto rc = folly::pwritev(fd_, iovecs.data(), iovecs.size(), offset);
     if (rc != bytes) {
       VELOX_SSD_CACHE_LOG(ERROR)
           << "Failed to write to SSD, file name: " << fileName_
           << ", fd: " << fd_ << ", size: " << iovecs.size()
           << ", offset: " << offset << ", error code: " << errno
-          << ", error string: " << folly::errnoStr(errno) << "rc" << rc;
+          << ", error string: " << folly::errnoStr(errno);
       ++stats_.writeSsdErrors;
       // If write fails, we return without adding the pins to the cache. The
       // entries are unchanged.
       return;
     }
-    VELOX_SSD_CACHE_LOG(ERROR)
-        << "Successfully wrote to SSD, file name: " << fileName_
-        << ", fd: " << fd_ << ", size: " << iovecs.size()
-        << ", offset: " << offset << ", error code: " << errno
-        << ", error string: " << folly::errnoStr(errno);
-    ++stats_.writeSsdErrors;
 
     {
       std::lock_guard<std::shared_mutex> l(mutex_);
