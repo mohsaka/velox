@@ -128,7 +128,11 @@ SsdFile::SsdFile(
       shardId_(shardId),
       checkpointIntervalBytes_(checkpointIntervalBytes),
       executor_(executor) {
-  fd_ = open(fileName_.c_str(), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+  int32_t oDirect = 0;
+#ifdef linux
+  oDirect = FLAGS_ssd_odirect ? O_DIRECT : 0;
+#endif // linux
+  fd_ = open(fileName_.c_str(), O_CREAT | O_RDWR | oDirect, S_IRUSR | S_IWUSR);
   if (FOLLY_UNLIKELY(fd_ < 0)) {
     ++stats_.openFileErrors;
   }
