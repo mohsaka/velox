@@ -797,13 +797,14 @@ bool MemoryPoolImpl::incrementReservationThreadSafe(
   }
   VELOX_MEM_POOL_CAP_EXCEEDED(fmt::format(
       "Exceeded memory pool cap of {} with max {} when requesting {}, memory "
-      "manager cap is {}, requestor '{}' with current usage {}\n{}",
+      "manager cap is {}, requestor '{}' with current usage {}. Num Allocated {}. \n{}",
       capacityToString(capacity()),
       capacityToString(maxCapacity_),
       succinctBytes(size),
       capacityToString(manager_->capacity()),
       requestor->name(),
       succinctBytes(requestor->currentBytes()),
+      AllocationTraits::pageBytes(allocator_->numAllocated()),
       treeMemoryUsage()));
 }
 
