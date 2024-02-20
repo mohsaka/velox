@@ -513,6 +513,9 @@ class S3FileSystem::Impl {
         std::make_shared<core::MemConfig>(config->values()));
     VELOX_CHECK(getAwsInstance()->isInitialized(), "S3 is not initialized");
     Aws::Client::ClientConfiguration clientConfig;
+    clientConfig.httpRequestTimeoutMs = 0;
+    clientConfig.requestTimeoutMs = 30000;
+    clientConfig.connectTimeoutMs = 10000;
     clientConfig.endpointOverride = hiveConfig_->s3Endpoint();
 
     if (hiveConfig_->s3UseSSL()) {
