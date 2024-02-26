@@ -514,6 +514,9 @@ class S3FileSystem::Impl {
     VELOX_CHECK(getAwsInstance()->isInitialized(), "S3 is not initialized");
     Aws::Client::ClientConfiguration clientConfig;
     clientConfig.endpointOverride = hiveConfig_->s3Endpoint();
+    clientConfig.httpRequestTimeoutMs = 0;
+    clientConfig.requestTimeoutMs = 30000;
+    clientConfig.connectTimeoutMs = 10000;
 
     if (hiveConfig_->s3UseProxyFromEnv()) {
       auto proxyConfig = S3ProxyConfigurationBuilder(hiveConfig_->s3Endpoint())
