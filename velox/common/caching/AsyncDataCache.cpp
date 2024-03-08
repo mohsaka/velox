@@ -663,6 +663,8 @@ bool AsyncDataCache::makeSpace(
   // serialize with a mutex because memory arbitration must not be
   // called from inside a global mutex.
 
+  clearMemoryCache();
+
   constexpr int32_t kMaxAttempts = kNumShards * 4;
   // Evict at least 1MB even for small allocations to avoid constantly hitting
   // the mutex protected evict loop.
@@ -880,6 +882,13 @@ void AsyncDataCache::clear() {
     memory::Allocation unused;
     shard->evict(std::numeric_limits<uint64_t>::max(), true, 0, unused);
     VELOX_CHECK(unused.empty());
+  }
+}
+
+void AsyncDataCache::clearMemoryCache() {
+  for (auto& shard : shards_) {
+    memory::Allocation unused;
+    shard->evict(std::numeric_limits<uint64_t>::max(), false, 0, unused);
   }
 }
 
