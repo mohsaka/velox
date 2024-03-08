@@ -883,6 +883,13 @@ void AsyncDataCache::clear() {
   }
 }
 
+void AsyncDataCache::clearMemoryCache() {
+  for (auto& shard : shards_) {
+    memory::Allocation unused;
+    shard->evict(std::numeric_limits<uint64_t>::max(), false, 0, unused);
+  }
+}
+
 std::string AsyncDataCache::toString(bool details) const {
   auto stats = refreshStats();
   std::stringstream out;
