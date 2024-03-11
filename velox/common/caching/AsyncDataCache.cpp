@@ -663,6 +663,7 @@ bool AsyncDataCache::makeSpace(
   // serialize with a mutex because memory arbitration must not be
   // called from inside a global mutex.
 
+  //clearMemoryCache();
   constexpr int32_t kMaxAttempts = kNumShards * 4;
   // Evict at least 1MB even for small allocations to avoid constantly hitting
   // the mutex protected evict loop.
