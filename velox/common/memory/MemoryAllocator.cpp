@@ -160,13 +160,14 @@ bool MemoryAllocator::allocateNonContiguous(
     MachinePageCount numPages,
     Allocation& out,
     ReservationCallback reservationCB,
-    MachinePageCount minSizeClass) {
+    MachinePageCount minSizeClass,
+    bool cacheAllocation) {
   if (cache() == nullptr) {
     return allocateNonContiguousWithoutRetry(
         numPages, out, reservationCB, minSizeClass);
   }
   const bool success = cache()->makeSpace(
-      pagesToAcquire(numPages, out.numPages()), [&](Allocation& acquired) {
+      pagesToAcquire(numPages, out.numPages()) + (cacheAllocation ? 10485760 : 0), [&](Allocation& acquired) {
         freeNonContiguous(acquired);
         return allocateNonContiguousWithoutRetry(
             numPages, out, reservationCB, minSizeClass);

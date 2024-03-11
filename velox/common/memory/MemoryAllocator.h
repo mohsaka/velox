@@ -251,7 +251,8 @@ class MemoryAllocator : public std::enable_shared_from_this<MemoryAllocator> {
       MachinePageCount numPages,
       Allocation& out,
       ReservationCallback reservationCB = nullptr,
-      MachinePageCount minSizeClass = 0);
+      MachinePageCount minSizeClass = 0,
+      bool cacheAllocation = false);
 
   /// Frees non-contiguous 'allocation'. 'allocation' is empty on return. The
   /// function returns the actual freed bytes.

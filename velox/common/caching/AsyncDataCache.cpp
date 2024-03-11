@@ -109,7 +109,7 @@ void AsyncDataCacheEntry::initialize(FileCacheKey key) {
     tinyData_.clear();
     tinyData_.shrink_to_fit();
     const auto sizePages = memory::AllocationTraits::numPages(size_);
-    if (cache->allocator()->allocateNonContiguous(sizePages, data_)) {
+    if (cache->allocator()->allocateNonContiguous(sizePages, data_, nullptr, 0, true)) {
       cache->incrementCachedPages(data().numPages());
     } else {
       // No memory to cover 'this'.
