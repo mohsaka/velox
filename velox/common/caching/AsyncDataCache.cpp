@@ -697,7 +697,6 @@ bool AsyncDataCache::makeSpace(
   for (auto nthAttempt = 0; nthAttempt < kMaxAttempts; ++nthAttempt) {
     if (canTryAllocate(numPages, acquired)) {
       if (allocate(acquired)) {
-        clearMemoryCache();
         return true;
       }
     }
