@@ -612,6 +612,7 @@ bool testFilters(
       // evolution, so we need to test both cases.
       if (!rowType->containsChild(name) || iter != partitionKey.end()) {
         if (iter != partitionKey.end() && iter->second.has_value()) {
+          // This is a non-null partition key
           auto handlesIter = partitionKeysHandle.find(name);
           VELOX_CHECK(handlesIter != partitionKeysHandle.end());
 
