@@ -342,6 +342,7 @@ bool MmapAllocator::allocateContiguousImpl(
         numPages,
         (useMmapArena_ ? "true" : "false"));
     VELOX_MEM_LOG(ERROR) << errorMsg;
+    VELOX_MEM_LOG(ERROR) << toString();
     setAllocatorFailureMessage(errorMsg);
     // If the mmap failed, we have unmapped former 'allocation' and the extra to
     // be mapped.
