@@ -271,6 +271,7 @@ bool MemoryAllocator::allocateContiguous(
     success = cache()->makeSpace(
         pagesToAcquire(numPages, numCollateralPages),
         [&](Allocation& acquired) {
+          freeNonContiguous(acquired);
           unmap(acquired.numPages());
           return allocateContiguousWithoutRetry(
               numPages, collateral, allocation, maxPages);
@@ -306,6 +307,7 @@ bool MemoryAllocator::growContiguous(
   } else {
     success = cache()->makeSpace(increment, [&](Allocation& acquired) {
       freeNonContiguous(acquired);
+      unmap(acquired.numPages());
       return growContiguousWithoutRetry(increment, allocation);
     });
   }
