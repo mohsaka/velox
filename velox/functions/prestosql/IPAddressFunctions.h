@@ -45,18 +45,17 @@ struct IPPrefixFunction {
 
     // All IPs are stored as V6
     folly::IPAddressV6 v6Addr(addrBytes);
-    folly::IPAddressV6 v6CanonicalAddr;
 
     // For return
+    folly::ByteArray16 canonicalBytes;
     int128_t canonicalAddrInt;
 
     if (v6Addr.isIPv4Mapped()) {
-      v6CanonicalAddr = v6Addr.createIPv4().mask(prefix).createIPv6();
+      canonicalAddrBytes =
+          v6Addr.createIPv4().mask(prefix).createIPv6().toByteArray();
     } else {
-      v6CanonicalAddr = v6Addr.mask(prefix);
+      canonicalAddrBytes = v6Addr.mask(prefix).toByteArray();
     }
-
-    auto canonicalBytes = v6CanonicalAddr.toByteArray();
     bigEndianByteArray(canonicalBytes);
     memcpy(&canonicalAddrInt, &canonicalBytes, 16);
 
