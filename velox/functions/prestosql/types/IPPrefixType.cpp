@@ -15,7 +15,7 @@
  */
 
 #include "velox/functions/prestosql/types/IPPrefixType.h"
-#include "velox/functions/prestosql/types/IPAddressType.h"
+#include <iostream>
 
 namespace facebook::velox {
 
@@ -75,25 +75,19 @@ class IPPrefixCastOperator : public exec::CastOperator {
     context.applyToSelectedNoThrow(rows, [&](auto row) {
       const auto intAddr =
           std::static_pointer_cast<IPPrefix>(ipaddresses->valueAt(row));
-      boost::asio::ip::address_v6::bytes_type addrBytes;
+      folly::ByteArray16 addrBytes;
       std::string s;
 
       memcpy(&addrBytes, &intAddr->ip, 16);
       bigEndianByteArray(addrBytes);
-      auto v6Addr = boost::asio::ip::make_address_v6(addrBytes);
+      folly::IPAddressV6 v6Addr(addrBytes);
 
-      if (v6Addr.is_v4_mapped()) {
-        auto v4Addr = boost::asio::ip::make_address_v4(
-            boost::asio::ip::v4_mapped, v6Addr);
-        auto v4Net =
-            boost::asio::ip::network_v4(v4Addr, (uint8_t)intAddr->prefix);
-        s = boost::lexical_cast<std::string>(v4Net);
+      if (v6Addr.isIPv4Mapped()) {
+        s = v6Addr.createIPv4().str();
       } else {
-        auto v6Net =
-            boost::asio::ip::network_v6(v6Addr, (uint8_t)intAddr->prefix);
-        s = boost::lexical_cast<std::string>(v6Net);
+        s = v6Addr.str();
       }
-
+      s += "/" + std::to_string((uint8_t)intAddr->prefix);
       exec::StringWriter<false> result(flatResult, row);
       result.append(s);
       result.finalize();
@@ -109,36 +103,23 @@ class IPPrefixCastOperator : public exec::CastOperator {
     const auto* ipAddressStrings = input.as<SimpleVector<StringView>>();
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
-      const auto ipAddressString = ipAddressStrings->valueAt(row);
-      int slashPos = ipAddressString.str().find_last_of('/');
-      std::string ipOnly = ipAddressString.str().substr(0, slashPos);
-      boost::asio::ip::address_v6 v6Addr;
-      boost::asio::ip::address_v6::bytes_type addrBytes;
-
-      auto addr = boost::asio::ip::make_address(ipOnly);
+      auto ipAddressString = ipAddressStrings->valueAt(row);
+      folly::CIDRNetwork net =
+          folly::IPAddress::createNetwork(ipAddressString, -1, false);
       IPPrefix res(0, 0);
-      if (addr.is_v4()) {
-        auto v4Net = boost::asio::ip::make_network_v4(ipAddressString);
-        res.prefix = (uint8_t)v4Net.prefix_length();
-        addrBytes = boost::asio::ip::make_address_v6(
-                        boost::asio::ip::v4_mapped, v4Net.canonical().address())
-                        .to_bytes();
+      folly::ByteArray16 addrBytes;
+
+      if (net.first.isIPv4Mapped() || net.first.isV4()) {
+        addrBytes = folly::IPAddress::createIPv4(net.first)
+                        .mask(net.second)
+                        .createIPv6()
+                        .toByteArray();
       } else {
-        auto v6Net = boost::asio::ip::make_network_v6(ipAddressString);
-        if (addr.to_v6().is_v4_mapped()) {
-          auto v4Addr = boost::asio::ip::make_address_v4(
-              boost::asio::ip::v4_mapped, addr.to_v6());
-          auto v4Net = boost::asio::ip::make_network_v4(
-              v4Addr, (uint8_t)v6Net.prefix_length());
-          addrBytes =
-              boost::asio::ip::make_address_v6(
-                  boost::asio::ip::v4_mapped, v4Net.canonical().address())
-                  .to_bytes();
-        } else {
-          addrBytes = v6Net.canonical().address().to_bytes();
-        }
-        res.prefix = (uint8_t)v6Net.prefix_length();
+        addrBytes = folly::IPAddress::createIPv6(net.first)
+                        .mask(net.second)
+                        .toByteArray();
       }
+      res.prefix = (uint8_t)net.second;
 
       bigEndianByteArray(addrBytes);
       memcpy(&res.ip, &addrBytes, 16);

@@ -15,11 +15,8 @@
  */
 #pragma once
 
-#include <boost/asio/ip/address.hpp>
-#include <boost/asio/ip/network_v4.hpp>
-#include <boost/asio/ip/network_v6.hpp>
-#include <boost/lexical_cast.hpp>
 #include <folly/Bits.h>
+#include <folly/IPAddress.h>
 #include "velox/expression/CastExpr.h"
 #include "velox/type/SimpleFunctionApi.h"
 #include "velox/type/Type.h"
@@ -28,8 +25,7 @@ namespace facebook::velox {
 
 // Converts BigEndian <-> native byte array
 // NOOP if system is Big Endian already
-inline void bigEndianByteArray(
-    boost::asio::ip::address_v6::bytes_type& addrBytes) {
+inline void bigEndianByteArray(folly::ByteArray16& addrBytes) {
   if (folly::kIsLittleEndian) {
     std::reverse(addrBytes.begin(), addrBytes.end());
   }

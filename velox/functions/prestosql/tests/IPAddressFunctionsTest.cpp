@@ -102,6 +102,10 @@ class IPAddressTest : public functions::test::FunctionBaseTest {
   }
 };
 
+TEST_F(IPAddressTest, castCircle) {
+  EXPECT_EQ(castIPAddress("::ffff:ffff:ffff"), "255.255.255.255");
+}
+
 TEST_F(IPAddressTest, castFail) {
   EXPECT_THROW(castIPAddress("12.483.09.1"), VeloxUserError);
   EXPECT_THROW(castIPAddress("10.135.23.12.12"), VeloxUserError);
@@ -116,8 +120,8 @@ TEST_F(IPAddressTest, castFail) {
 
   EXPECT_THROW(castIPPrefix("12.135.23.12/-1"), VeloxUserError);
   EXPECT_THROW(castIPPrefix("10.135.23.12/33"), VeloxUserError);
-  EXPECT_THROW(castIPPrefix("::ffff:1.2.3.4/-1"), VeloxUserError);
-  EXPECT_THROW(castIPPrefix("::ffff:1.2.3.4/33"), VeloxUserError);
+  EXPECT_THROW(castIPPrefix("::ffff:ffff:ffff/-1"), VeloxUserError);
+  EXPECT_THROW(castIPPrefix("::ffff:ffff:ffff/33"), VeloxUserError);
   EXPECT_THROW(castIPPrefix("64:ff9b::10/-1"), VeloxUserError);
   EXPECT_THROW(castIPPrefix("64:ff9b::10/129"), VeloxUserError);
   EXPECT_THROW(castIPPrefix("::ffff:1.2.3.4/-1"), VeloxUserError);
@@ -454,8 +458,6 @@ TEST_F(IPAddressTest, IPSubnetOfPrestoTests) {
   EXPECT_EQ(getIsSubnetOfIPPrefix("170.0.52.0/22", "170.0.52.0/24"), true);
   EXPECT_EQ(getIsSubnetOfIPPrefix("170.0.52.0/24", "170.0.52.0/22"), false);
 }
-
 } // namespace
 
 } // namespace facebook::velox::functions::prestosql
-                                                    

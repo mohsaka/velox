@@ -19,8 +19,8 @@
 #include <boost/asio/ip/network_v4.hpp>
 #include <boost/asio/ip/network_v6.hpp>
 #include <boost/lexical_cast.hpp>
-#include <folly/IPAddress.h>
 #include "velox/expression/CastExpr.h"
+#include "velox/functions/prestosql/types/IPAddressType.h"
 #include "velox/type/OpaqueCustomTypes.h"
 #include "velox/type/SimpleFunctionApi.h"
 #include "velox/type/Type.h"

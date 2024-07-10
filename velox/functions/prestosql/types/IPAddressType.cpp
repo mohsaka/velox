@@ -76,19 +76,17 @@ class IPAddressCastOperator : public exec::CastOperator {
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
       const auto intAddr = ipaddresses->valueAt(row);
-      boost::asio::ip::address_v6::bytes_type addrBytes;
+      folly::ByteArray16 addrBytes;
       std::string s;
       memcpy(&addrBytes, &intAddr, 16);
 
       bigEndianByteArray(addrBytes);
-      auto v6Addr = boost::asio::ip::make_address_v6(addrBytes);
+      folly::IPAddressV6 v6Addr(addrBytes);
 
-      if (v6Addr.is_v4_mapped()) {
-        auto v4Addr = boost::asio::ip::make_address_v4(
-            boost::asio::ip::v4_mapped, v6Addr);
-        s = boost::lexical_cast<std::string>(v4Addr);
+      if (v6Addr.isIPv4Mapped()) {
+        s = v6Addr.createIPv4().str();
       } else {
-        s = boost::lexical_cast<std::string>(v6Addr);
+        s = v6Addr.str();
       }
 
       exec::StringWriter<false> result(flatResult, row);
@@ -107,16 +105,10 @@ class IPAddressCastOperator : public exec::CastOperator {
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
       const auto ipAddressString = ipAddressStrings->valueAt(row);
-      boost::asio::ip::address_v6::bytes_type addrBytes;
-      auto addr = boost::asio::ip::make_address(ipAddressString);
       int128_t intAddr;
-      if (addr.is_v4()) {
-        addrBytes = boost::asio::ip::make_address_v6(
-                        boost::asio::ip::v4_mapped, addr.to_v4())
-                        .to_bytes();
-      } else {
-        addrBytes = addr.to_v6().to_bytes();
-      }
+      folly::IPAddress addr(ipAddressString);
+
+      auto addrBytes = folly::IPAddress::createIPv6(addr).toByteArray();
 
       bigEndianByteArray(addrBytes);
       memcpy(&intAddr, &addrBytes, 16);

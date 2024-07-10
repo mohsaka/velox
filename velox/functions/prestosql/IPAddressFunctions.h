@@ -18,16 +18,13 @@
 #include "velox/functions/Macros.h"
 #include "velox/functions/Registerer.h"
 #include "velox/functions/lib/string/StringImpl.h"
-#include "velox/functions/prestosql/types/IPAddressType.h"
 #include "velox/functions/prestosql/types/IPPrefixType.h"
-
-#include <iostream>
 
 namespace facebook::velox::functions {
 
 inline bool isIPV4(int128_t ip) {
   int128_t ipV4 = 0x0000FFFF00000000;
-  int128_t mask = 0xFFFFFFFFFFFFFFFF;
+  uint128_t mask = 0xFFFFFFFFFFFFFFFF;
   mask = (mask << 64) | 0xFFFFFFFF00000000;
   return (ip & mask) == ipV4;
 }
@@ -42,31 +39,24 @@ struct IPPrefixFunction {
       const arg_type<int8_t> prefixBits) {
     // Presto stores prefixBits in one signed byte. Cast to unsigned
     uint8_t prefix = (uint8_t)prefixBits;
-    boost::asio::ip::address_v6::bytes_type addrBytes;
+    folly::ByteArray16 addrBytes;
     memcpy(&addrBytes, &ip, 16);
     bigEndianByteArray(addrBytes);
 
     // All IPs are stored as V6
-    auto v6Addr = boost::asio::ip::make_address_v6(addrBytes);
-    boost::asio::ip::address_v6 v6CanonicalAddr;
+    folly::IPAddressV6 v6Addr(addrBytes);
+    folly::IPAddressV6 v6CanonicalAddr;
 
     // For return
     int128_t canonicalAddrInt;
 
-    // Convert to V4/V6 respectively and create network to get canonical
-    // address as well as check validity of the prefix.
-    if (v6Addr.is_v4_mapped()) {
-      auto v4Addr =
-          boost::asio::ip::make_address_v4(boost::asio::ip::v4_mapped, v6Addr);
-      auto v4Network = boost::asio::ip::make_network_v4(v4Addr, prefix);
-      v6CanonicalAddr = boost::asio::ip::make_address_v6(
-          boost::asio::ip::v4_mapped, v4Network.canonical().address());
+    if (v6Addr.isIPv4Mapped()) {
+      v6CanonicalAddr = v6Addr.createIPv4().mask(prefix).createIPv6();
     } else {
-      auto v6Network = boost::asio::ip::make_network_v6(v6Addr, prefix);
-      v6CanonicalAddr = v6Network.canonical().address();
+      v6CanonicalAddr = v6Addr.mask(prefix);
     }
 
-    auto canonicalBytes = v6CanonicalAddr.to_bytes();
+    auto canonicalBytes = v6CanonicalAddr.toByteArray();
     bigEndianByteArray(canonicalBytes);
     memcpy(&canonicalAddrInt, &canonicalBytes, 16);
 
@@ -77,16 +67,9 @@ struct IPPrefixFunction {
       out_type<TheIPPrefix>& result,
       const arg_type<Varchar>& ip,
       const arg_type<int8_t> prefixBits) {
-    boost::asio::ip::address_v6::bytes_type addrBytes;
-    auto addr = boost::asio::ip::make_address(ip);
     int128_t intAddr;
-    if (addr.is_v4()) {
-      addrBytes = boost::asio::ip::make_address_v6(
-                      boost::asio::ip::v4_mapped, addr.to_v4())
-                      .to_bytes();
-    } else {
-      addrBytes = addr.to_v6().to_bytes();
-    }
+    folly::IPAddress addr(ip);
+    auto addrBytes = folly::IPAddress::createIPv6(addr).toByteArray();
 
     bigEndianByteArray(addrBytes);
     memcpy(&intAddr, &addrBytes, 16);
@@ -110,7 +93,6 @@ struct IPSubnetMinFunction {
 inline int128_t getIPSubnetMax(int128_t ip, uint8_t prefix) {
   uint128_t mask = 1;
   int128_t result;
-  boost::asio::ip::address_v6::bytes_type addrBytes;
   memcpy(&result, &ip, 16);
 
   if (isIPV4(ip)) {
