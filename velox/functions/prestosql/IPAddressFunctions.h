@@ -51,10 +51,10 @@ struct IPPrefixFunction {
     int128_t canonicalAddrInt;
 
     if (v6Addr.isIPv4Mapped()) {
-      canonicalAddrBytes =
+      canonicalBytes =
           v6Addr.createIPv4().mask(prefix).createIPv6().toByteArray();
     } else {
-      canonicalAddrBytes = v6Addr.mask(prefix).toByteArray();
+      canonicalBytes = v6Addr.mask(prefix).toByteArray();
     }
     bigEndianByteArray(canonicalBytes);
     memcpy(&canonicalAddrInt, &canonicalBytes, 16);
