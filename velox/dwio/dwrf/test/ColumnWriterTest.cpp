@@ -386,6 +386,36 @@ TEST_F(ColumnWriterTest, LowMemoryModeConfig) {
   EXPECT_TRUE(writer->useDictionaryEncoding());
 }
 
+TEST_F(ColumnWriterTest, IntegerDictionaryEncodingEnabledConfig) {
+  auto dataTypeWithId = TypeWithId::create(INTEGER(), 1);
+  auto config = std::make_shared<Config>();
+  config->set(Config::INTEGER_DICTIONARY_ENCODING_ENABLED, true);
+  WriterContext context{config, memory::memoryManager()->addRootPool()};
+  context.initBuffer();
+  auto writer = BaseColumnWriter::create(context, *dataTypeWithId);
+  EXPECT_TRUE(writer->useDictionaryEncoding());
+
+  dataTypeWithId = TypeWithId::create(INTEGER(), 2);
+  config->set(Config::INTEGER_DICTIONARY_ENCODING_ENABLED, false);
+  writer = BaseColumnWriter::create(context, *dataTypeWithId);
+  EXPECT_FALSE(writer->useDictionaryEncoding());
+}
+
+TEST_F(ColumnWriterTest, StringDictionaryEncodingEnabledConfig) {
+  auto dataTypeWithId = TypeWithId::create(VARCHAR(), 1);
+  auto config = std::make_shared<Config>();
+  config->set(Config::STRING_DICTIONARY_ENCODING_ENABLED, true);
+  WriterContext context{config, memory::memoryManager()->addRootPool()};
+  context.initBuffer();
+  auto writer = BaseColumnWriter::create(context, *dataTypeWithId);
+  EXPECT_TRUE(writer->useDictionaryEncoding());
+
+  dataTypeWithId = TypeWithId::create(VARCHAR(), 2);
+  config->set(Config::STRING_DICTIONARY_ENCODING_ENABLED, false);
+  writer = BaseColumnWriter::create(context, *dataTypeWithId);
+  EXPECT_FALSE(writer->useDictionaryEncoding());
+}
+
 TEST_F(ColumnWriterTest, TestBooleanWriter) {
   std::vector<std::optional<bool>> data;
   for (auto i = 0; i < ITERATIONS; ++i) {
@@ -1596,12 +1626,13 @@ std::unique_ptr<DwrfReader> getDwrfReader(
   writer.write(batch);
   writer.close();
 
-  std::string_view data(sinkPtr->data(), sinkPtr->size());
+  std::string data(sinkPtr->data(), sinkPtr->size());
   dwio::common::ReaderOptions readerOpts{&leafPool};
   return std::make_unique<DwrfReader>(
       readerOpts,
       std::make_unique<BufferedInput>(
-          std::make_shared<InMemoryReadFile>(data), readerOpts.memoryPool()));
+          std::make_shared<InMemoryReadFile>(std::move(data)),
+          readerOpts.memoryPool()));
 }
 
 void removeSizeFromStats(std::string& input) {

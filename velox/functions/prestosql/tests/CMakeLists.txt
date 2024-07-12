@@ -24,6 +24,7 @@ add_executable(
   ArrayConcatTest.cpp
   ArrayConstructorTest.cpp
   ArrayContainsTest.cpp
+  ArrayCumSumTest.cpp
   ArrayDistinctTest.cpp
   ArrayDuplicatesTest.cpp
   ArrayExceptTest.cpp
@@ -56,6 +57,7 @@ add_executable(
   DateTimeFunctionsTest.cpp
   DecimalArithmeticTest.cpp
   ElementAtTest.cpp
+  FailTest.cpp
   FindFirstTest.cpp
   FromUtf8Test.cpp
   GreatestLeastTest.cpp
@@ -71,6 +73,7 @@ add_executable(
   MapFromEntriesTest.cpp
   MapNormalizeTest.cpp
   MapTopNTest.cpp
+  MapTopNKeysTest.cpp
   MapKeysAndValuesTest.cpp
   MapMatchTest.cpp
   MapTest.cpp

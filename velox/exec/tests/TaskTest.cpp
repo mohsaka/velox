@@ -1108,6 +1108,7 @@ DEBUG_ONLY_TEST_F(TaskTest, outputDriverFinishEarly) {
         "VALUES (0)",
         duckDbQueryRunner_);
     ASSERT_TRUE(waitForTaskStateChange(task, TaskState::kFinished, 3'000'000));
+    ASSERT_FALSE(task->getCancellationToken().isCancellationRequested());
   }
   valuePromise.setValue();
   // Wait for Values driver to complete.
@@ -1164,6 +1165,7 @@ DEBUG_ONLY_TEST_F(TaskTest, liveStats) {
     EXPECT_EQ(0, liveStats[i].numCompletedDrivers);
     EXPECT_EQ(0, liveStats[i].numTerminatedDrivers);
     EXPECT_EQ(1, liveStats[i].numRunningDrivers);
+    EXPECT_EQ(0, liveStats[i].numQueuedDrivers);
     EXPECT_EQ(0, liveStats[i].numBlockedDrivers.size());
 
     EXPECT_EQ(0, liveStats[i].executionEndTimeMs);
@@ -1172,6 +1174,7 @@ DEBUG_ONLY_TEST_F(TaskTest, liveStats) {
 
   EXPECT_EQ(1, finishStats.numTotalDrivers);
   EXPECT_EQ(1, finishStats.numCompletedDrivers);
+  EXPECT_EQ(0, finishStats.numQueuedDrivers);
   EXPECT_EQ(0, finishStats.numTerminatedDrivers);
   EXPECT_EQ(0, finishStats.numRunningDrivers);
   EXPECT_EQ(0, finishStats.numBlockedDrivers.size());
@@ -2137,5 +2140,58 @@ DEBUG_ONLY_TEST_F(TaskTest, taskDeletionPromise) {
   // The task deletion future is ful-filled after the wait.
   ASSERT_TRUE(deleteFuture.wait().hasValue());
   queryThread.join();
+}
+
+DEBUG_ONLY_TEST_F(TaskTest, taskCancellation) {
+  const auto data = makeRowVector({
+      makeFlatVector<int64_t>(50, [](auto row) { return row; }),
+      makeFlatVector<int64_t>(50, [](auto row) { return row; }),
+  });
+  auto planNodeIdGenerator = std::make_shared<core::PlanNodeIdGenerator>();
+  const auto plan = PlanBuilder(planNodeIdGenerator)
+                        .values({data})
+                        .singleAggregation({"c0"}, {"sum(c1)"}, {})
+                        .planFragment();
+
+  std::atomic<bool> driverWaitFlag{true};
+  folly::EventCount driverWait;
+  SCOPED_TESTVALUE_SET(
+      "facebook::velox::exec::Task::enter",
+      std::function<void(const velox::exec::ThreadState*)>(
+          ([&](const velox::exec::ThreadState* /*unused*/) {
+            driverWait.await([&]() { return !driverWaitFlag.load(); });
+          })));
+
+  auto task = Task::create(
+      "task",
+      std::move(plan),
+      0,
+      core::QueryCtx::create(driverExecutor_.get()),
+      Task::ExecutionMode::kParallel);
+  task->start(4, 1);
+  auto cancellationToken = task->getCancellationToken();
+  ASSERT_FALSE(cancellationToken.isCancellationRequested());
+
+  // Request pause.
+  auto pauseWait = task->requestPause();
+  // Fail the task.
+  task->requestAbort();
+  ASSERT_TRUE(cancellationToken.isCancellationRequested());
+
+  // Unblock drivers.
+  driverWaitFlag = false;
+  driverWait.notifyAll();
+  // Let driver threads run before resume.
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+  // Wait for task pause to complete.
+  pauseWait.wait();
+
+  // Resume the task and expect all drivers to close.
+  Task::resume(task);
+  ASSERT_TRUE(waitForTaskAborted(task.get()));
+  ASSERT_TRUE(cancellationToken.isCancellationRequested());
+
+  task.reset();
+  waitForAllTasksToBeDeleted();
 }
 } // namespace facebook::velox::exec::test

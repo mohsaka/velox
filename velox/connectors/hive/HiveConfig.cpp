@@ -120,6 +120,16 @@ std::optional<uint32_t> HiveConfig::s3MaxConnections() const {
       config_->get<uint32_t>(kS3MaxConnections));
 }
 
+std::optional<int32_t> HiveConfig::s3MaxAttempts() const {
+  return static_cast<std::optional<std::int32_t>>(
+      config_->get<int32_t>(kS3MaxAttempts));
+}
+
+std::optional<std::string> HiveConfig::s3RetryMode() const {
+  return static_cast<std::optional<std::string>>(
+      config_->get<std::string>(kS3RetryMode));
+}
+
 std::string HiveConfig::gcsEndpoint() const {
   return config_->get<std::string>(kGCSEndpoint, std::string(""));
 }
@@ -198,6 +208,20 @@ uint64_t HiveConfig::orcWriterMaxDictionaryMemory(const Config* session) const {
           kOrcWriterMaxDictionaryMemorySession,
           config_->get<std::string>(kOrcWriterMaxDictionaryMemory, "16MB")),
       core::CapacityUnit::BYTE);
+}
+
+bool HiveConfig::isOrcWriterIntegerDictionaryEncodingEnabled(
+    const Config* session) const {
+  return session->get<bool>(
+      kOrcWriterIntegerDictionaryEncodingEnabledSession,
+      config_->get<bool>(kOrcWriterIntegerDictionaryEncodingEnabled, true));
+}
+
+bool HiveConfig::isOrcWriterStringDictionaryEncodingEnabled(
+    const Config* session) const {
+  return session->get<bool>(
+      kOrcWriterStringDictionaryEncodingEnabledSession,
+      config_->get<bool>(kOrcWriterStringDictionaryEncodingEnabled, true));
 }
 
 bool HiveConfig::orcWriterLinearStripeSizeHeuristics(

@@ -98,6 +98,12 @@ class HiveConfig {
   /// Maximum concurrent TCP connections for a single http client.
   static constexpr const char* kS3MaxConnections = "hive.s3.max-connections";
 
+  /// Maximum retry attempts for a single http client.
+  static constexpr const char* kS3MaxAttempts = "hive.s3.max-attempts";
+
+  /// Retry mode for a single http client.
+  static constexpr const char* kS3RetryMode = "hive.s3.retry-mode";
+
   /// The GCS storage endpoint server.
   static constexpr const char* kGCSEndpoint = "hive.gcs.endpoint";
 
@@ -142,7 +148,8 @@ class HiveConfig {
   /// The number of prefetch rowgroups
   static constexpr const char* kPrefetchRowGroups = "prefetch-rowgroups";
 
-  /// The total size in bytes for a direct coalesce request.
+  /// The total size in bytes for a direct coalesce request. Up to 8MB load
+  /// quantum size is supported when SSD cache is enabled.
   static constexpr const char* kLoadQuantum = "load-quantum";
 
   /// Maximum number of entries in the file handle cache.
@@ -172,6 +179,18 @@ class HiveConfig {
       "hive.orc.writer.dictionary-max-memory";
   static constexpr const char* kOrcWriterMaxDictionaryMemorySession =
       "orc_optimized_writer_max_dictionary_memory";
+
+  /// Configs to control dictionary encoding.
+  static constexpr const char* kOrcWriterIntegerDictionaryEncodingEnabled =
+      "hive.orc.writer.integer-dictionary-encoding-enabled";
+  static constexpr const char*
+      kOrcWriterIntegerDictionaryEncodingEnabledSession =
+          "orc_optimized_writer_integer_dictionary_encoding_enabled";
+  static constexpr const char* kOrcWriterStringDictionaryEncodingEnabled =
+      "hive.orc.writer.string-dictionary-encoding-enabled";
+  static constexpr const char*
+      kOrcWriterStringDictionaryEncodingEnabledSession =
+          "orc_optimized_writer_string_dictionary_encoding_enabled";
 
   /// Enables historical based stripe size estimation after compression.
   static constexpr const char* kOrcWriterLinearStripeSizeHeuristics =
@@ -252,6 +271,10 @@ class HiveConfig {
 
   std::optional<uint32_t> s3MaxConnections() const;
 
+  std::optional<int32_t> s3MaxAttempts() const;
+
+  std::optional<std::string> s3RetryMode() const;
+
   std::string gcsEndpoint() const;
 
   std::string gcsScheme() const;
@@ -287,6 +310,10 @@ class HiveConfig {
   uint64_t orcWriterMaxStripeSize(const Config* session) const;
 
   uint64_t orcWriterMaxDictionaryMemory(const Config* session) const;
+
+  bool isOrcWriterIntegerDictionaryEncodingEnabled(const Config* session) const;
+
+  bool isOrcWriterStringDictionaryEncodingEnabled(const Config* session) const;
 
   bool orcWriterLinearStripeSizeHeuristics(const Config* session) const;
 

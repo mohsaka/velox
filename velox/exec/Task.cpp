@@ -295,7 +295,7 @@ Task::Task(
       queryCtx_(std::move(queryCtx)),
       mode_(mode),
       consumerSupplier_(std::move(consumerSupplier)),
-      onError_(onError),
+      onError_(std::move(onError)),
       splitsStates_(buildSplitStates(planFragment_.planNode)),
       bufferManager_(OutputBufferManager::getInstance()) {
   // NOTE: the executor must not be folly::InlineLikeExecutor for parallel
@@ -1855,7 +1855,7 @@ ContinueFuture Task::terminate(TaskState terminalState) {
     if (taskStats_.executionEndTimeMs == 0) {
       taskStats_.executionEndTimeMs = getCurrentTimeMs();
     }
-    if (not isRunningLocked()) {
+    if (!isRunningLocked()) {
       return makeFinishFutureLocked("Task::terminate");
     }
     state_ = terminalState;
@@ -1872,6 +1872,10 @@ ContinueFuture Task::terminate(TaskState terminalState) {
       } catch (const std::exception&) {
         exception_ = std::current_exception();
       }
+    }
+    if (state_ != TaskState::kFinished) {
+      VELOX_CHECK(!cancellationSource_.isCancellationRequested());
+      cancellationSource_.requestCancellation();
     }
 
     LOG(INFO) << "Terminating task " << taskId() << " with state "
@@ -2086,8 +2090,13 @@ TaskStats Task::taskStats() const {
       ++taskStats.numRunningDrivers;
     } else if (driver->isTerminated()) {
       ++taskStats.numTerminatedDrivers;
+    } else if (driver->state().isEnqueued) {
+      ++taskStats.numQueuedDrivers;
     } else {
-      ++taskStats.numBlockedDrivers[driver->blockingReason()];
+      const auto blockingReason = driver->blockingReason();
+      if (blockingReason != BlockingReason::kNotBlocked) {
+        ++taskStats.numBlockedDrivers[blockingReason];
+      }
     }
     // Find the longest running operator.
     auto ocs = driver->opCallStatus();
@@ -2181,7 +2190,7 @@ Task::DriverCounts Task::driverCounts() const {
       } else {
         const auto blockingReason = driver->blockingReason();
         if (blockingReason != BlockingReason::kNotBlocked) {
-          ++ret.numBlockedDrivers[driver->blockingReason()];
+          ++ret.numBlockedDrivers[blockingReason];
         }
       }
     }

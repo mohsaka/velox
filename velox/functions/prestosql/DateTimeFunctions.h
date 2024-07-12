@@ -48,16 +48,57 @@ template <typename T>
 struct FromUnixtimeFunction {
   VELOX_DEFINE_FUNCTION_TYPES(T);
 
-  FOLLY_ALWAYS_INLINE bool call(
+  // (double) -> timestamp
+  FOLLY_ALWAYS_INLINE void call(
       Timestamp& result,
       const arg_type<double>& unixtime) {
-    auto resultOptional = fromUnixtime(unixtime);
-    if (LIKELY(resultOptional.has_value())) {
-      result = resultOptional.value();
-      return true;
-    }
-    return false;
+    result = fromUnixtime(unixtime);
   }
+
+  // (double, varchar) -> timestamp with time zone
+  FOLLY_ALWAYS_INLINE void initialize(
+      const std::vector<TypePtr>& /*inputTypes*/,
+      const core::QueryConfig& /*config*/,
+      const arg_type<double>* /*unixtime*/,
+      const arg_type<Varchar>* timezone) {
+    if (timezone != nullptr) {
+      tzID_ = util::getTimeZoneID((std::string_view)(*timezone));
+    }
+  }
+
+  FOLLY_ALWAYS_INLINE void call(
+      out_type<TimestampWithTimezone>& result,
+      const arg_type<double>& unixtime,
+      const arg_type<Varchar>& timezone) {
+    int16_t timezoneId =
+        tzID_.value_or(util::getTimeZoneID((std::string_view)timezone));
+    result = pack(fromUnixtime(unixtime).toMillis(), timezoneId);
+  }
+
+  // (double, bigint, bigint) -> timestamp with time zone
+  FOLLY_ALWAYS_INLINE void initialize(
+      const std::vector<TypePtr>& /*inputTypes*/,
+      const core::QueryConfig& /*config*/,
+      const arg_type<double>* /*unixtime*/,
+      const arg_type<int64_t>* hours,
+      const arg_type<int64_t>* minutes) {
+    if (hours != nullptr && minutes != nullptr) {
+      tzID_ = util::getTimeZoneID(*hours * 60 + *minutes);
+    }
+  }
+
+  FOLLY_ALWAYS_INLINE void call(
+      out_type<TimestampWithTimezone>& result,
+      const arg_type<double>& unixtime,
+      const arg_type<int64_t>& hours,
+      const arg_type<int64_t>& minutes) {
+    int16_t timezoneId =
+        tzID_.value_or(util::getTimeZoneID(hours * 60 + minutes));
+    result = pack(fromUnixtime(unixtime).toMillis(), timezoneId);
+  }
+
+ private:
+  std::optional<int64_t> tzID_;
 };
 
 namespace {
@@ -462,6 +503,13 @@ struct TimestampMinusFunction {
       const arg_type<Timestamp>& a,
       const arg_type<Timestamp>& b) {
     result = a.toMillis() - b.toMillis();
+  }
+
+  FOLLY_ALWAYS_INLINE void call(
+      out_type<IntervalDayTime>& result,
+      const arg_type<TimestampWithTimezone>& a,
+      const arg_type<TimestampWithTimezone>& b) {
+    result = unpackMillisUtc(a) - unpackMillisUtc(b);
   }
 };
 
@@ -1030,22 +1078,42 @@ struct DateTruncFunction : public TimestampWithTimezoneSupport<T> {
     }
 
     switch (unit) {
+      // For seconds, we just truncate the nanoseconds part of the timestamp; no
+      // timezone conversion required.
       case DateTimeUnit::kSecond:
         result = Timestamp(timestamp.getSeconds(), 0);
         return;
+
+      // Same for minutes; timezones and daylight savings time are at least in
+      // the granularity of 30 mins, so we can just truncate the epoch directly.
       case DateTimeUnit::kMinute:
-        result = adjustEpoch(getSeconds(timestamp, timeZone_), 60);
-        break;
-      case DateTimeUnit::kHour:
-        result = adjustEpoch(getSeconds(timestamp, timeZone_), 60 * 60);
-        break;
+        result = adjustEpoch(timestamp.getSeconds(), 60);
+        return;
+
+      // Hour truncation has to handle the corner case of daylight savings time
+      // boundaries. Since conversions from local timezone to UTC may be
+      // ambiguous, we need to be carefull about the roundtrip of converting to
+      // local time and back. So what we do is to calculate the truncation delta
+      // in UTC, then applying it to the input timestamp.
+      case DateTimeUnit::kHour: {
+        auto epochToAdjust = getSeconds(timestamp, timeZone_);
+        auto secondsDelta =
+            epochToAdjust - adjustEpoch(epochToAdjust, 60 * 60).getSeconds();
+        result = Timestamp(timestamp.getSeconds() - secondsDelta, 0);
+        return;
+      }
+
+      // For the truncations below, we may first need to convert to the local
+      // timestamp, truncate, then convert back to GMT.
       case DateTimeUnit::kDay:
         result = adjustEpoch(getSeconds(timestamp, timeZone_), 24 * 60 * 60);
         break;
+
       default:
         auto dateTime = getDateTime(timestamp, timeZone_);
         adjustDateTime(dateTime, unit);
         result = Timestamp(Timestamp::calendarUtcToEpoch(dateTime), 0);
+        break;
     }
 
     if (timeZone_ != nullptr) {
@@ -1098,7 +1166,7 @@ struct DateTruncFunction : public TimestampWithTimezoneSupport<T> {
         Timestamp::fromMillis(Timestamp::calendarUtcToEpoch(dateTime) * 1000);
     timestamp.toGMT(unpackZoneKeyId(timestampWithTimezone));
 
-    result = pack(timestamp.toMillis(), unpackZoneKeyId(timestampWithTimezone));
+    result = pack(timestamp, unpackZoneKeyId(timestampWithTimezone));
   }
 
  private:
@@ -1187,9 +1255,8 @@ struct DateAddFunction : public TimestampWithTimezoneSupport<T> {
       const arg_type<Varchar>& unitString,
       const int64_t value,
       const arg_type<TimestampWithTimezone>& timestampWithTimezone) {
-    const auto unit = unit_.has_value()
-        ? unit_.value()
-        : fromDateTimeUnitString(unitString, true /*throwIfInvalid*/).value();
+    const auto unit = unit_.value_or(
+        fromDateTimeUnitString(unitString, true /*throwIfInvalid*/).value());
 
     if (value != (int32_t)value) {
       VELOX_UNSUPPORTED("integer overflow");
@@ -1423,7 +1490,7 @@ struct FromIso8601Timestamp {
       tzID = sessionTzID_;
     }
     ts.toGMT(tzID);
-    result = pack(ts.toMillis(), tzID);
+    result = pack(ts, tzID);
     return Status::OK();
   }
 
@@ -1466,8 +1533,8 @@ struct DateParseFunction {
     }
 
     auto dateTimeResult = format_->parse((std::string_view)(input));
-    if (!dateTimeResult.has_value()) {
-      return Status::UserError("Invalid date format: '{}'", input);
+    if (dateTimeResult.hasError()) {
+      return dateTimeResult.error();
     }
 
     // Since MySql format has no timezone specifier, simply check if session
@@ -1583,9 +1650,9 @@ struct ParseDateTimeFunction {
           std::string_view(format.data(), format.size()));
     }
     auto dateTimeResult =
-        format_->parse(std::string_view(input.data(), input.size()), false);
-    if (!dateTimeResult.has_value()) {
-      return Status::UserError("Invalid date format: '{}'", input);
+        format_->parse(std::string_view(input.data(), input.size()));
+    if (dateTimeResult.hasError()) {
+      return dateTimeResult.error();
     }
 
     // If timezone was not parsed, fallback to the session timezone. If there's
@@ -1594,7 +1661,7 @@ struct ParseDateTimeFunction {
         ? dateTimeResult->timezoneId
         : sessionTzID_.value_or(0);
     dateTimeResult->timestamp.toGMT(timezoneId);
-    result = pack(dateTimeResult->timestamp.toMillis(), timezoneId);
+    result = pack(dateTimeResult->timestamp, timezoneId);
     return Status::OK();
   }
 };
