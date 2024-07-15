@@ -137,7 +137,7 @@ JSON                      VARCHAR
 TIMESTAMP WITH TIME ZONE  BIGINT
 UUID                      HUGEINT
 IPADDRESS                 HUGEINT
-IPPREFIX                  (HUGEINT, TINYINT)
+IPPREFIX                  (HUGEINT, BIGINT)
 ========================  =====================
 
 TIMESTAMP WITH TIME ZONE represents a time point in milliseconds precision
