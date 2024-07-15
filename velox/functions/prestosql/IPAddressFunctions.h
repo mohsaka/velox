@@ -36,7 +36,7 @@ struct IPPrefixFunction {
   FOLLY_ALWAYS_INLINE void call(
       out_type<TheIPPrefix>& result,
       const arg_type<IPAddress>& ip,
-      const arg_type<int8_t> prefixBits) {
+      const arg_type<int64_t> prefixBits) {
     // Presto stores prefixBits in one signed byte. Cast to unsigned
     uint8_t prefix = (uint8_t)prefixBits;
     folly::ByteArray16 addrBytes;
@@ -65,7 +65,7 @@ struct IPPrefixFunction {
   FOLLY_ALWAYS_INLINE void call(
       out_type<TheIPPrefix>& result,
       const arg_type<Varchar>& ip,
-      const arg_type<int8_t> prefixBits) {
+      const arg_type<int64_t> prefixBits) {
     int128_t intAddr;
     folly::IPAddress addr(ip);
     auto addrBytes = folly::IPAddress::createIPv6(addr).toByteArray();
@@ -166,9 +166,9 @@ struct IPSubnetOfFunction {
 void registerIPAddressFunctions(const std::string& prefix) {
   registerIPAddressType();
   registerIPPrefixType();
-  registerFunction<IPPrefixFunction, TheIPPrefix, IPAddress, int8_t>(
+  registerFunction<IPPrefixFunction, TheIPPrefix, IPAddress, int64_t>(
       {prefix + "ip_prefix"});
-  registerFunction<IPPrefixFunction, TheIPPrefix, Varchar, int8_t>(
+  registerFunction<IPPrefixFunction, TheIPPrefix, Varchar, int64_t>(
       {prefix + "ip_prefix"});
   registerFunction<IPSubnetMinFunction, IPAddress, TheIPPrefix>(
       {prefix + "ip_subnet_min"});
