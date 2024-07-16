@@ -1,0 +1,151 @@
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+#include "velox/functions/prestosql/types/IPPrefixType.h"
+#include <iostream>
+
+namespace facebook::velox {
+
+namespace {
+
+class IPPrefixCastOperator : public exec::CastOperator {
+ public:
+  bool isSupportedFromType(const TypePtr& other) const override {
+    return VARCHAR()->equivalent(*other);
+  }
+
+  bool isSupportedToType(const TypePtr& other) const override {
+    return VARCHAR()->equivalent(*other);
+  }
+
+  void castTo(
+      const BaseVector& input,
+      exec::EvalCtx& context,
+      const SelectivityVector& rows,
+      const TypePtr& resultType,
+      VectorPtr& result) const override {
+    context.ensureWritable(rows, resultType, result);
+
+    if (input.typeKind() == TypeKind::VARCHAR) {
+      castFromString(input, context, rows, *result);
+    } else {
+      VELOX_UNSUPPORTED(
+          "Cast from {} to IPPrefix not yet supported", resultType->toString());
+    }
+  }
+
+  void castFrom(
+      const BaseVector& input,
+      exec::EvalCtx& context,
+      const SelectivityVector& rows,
+      const TypePtr& resultType,
+      VectorPtr& result) const override {
+    context.ensureWritable(rows, resultType, result);
+
+    if (resultType->kind() == TypeKind::VARCHAR) {
+      castToString(input, context, rows, *result);
+    } else {
+      VELOX_UNSUPPORTED(
+          "Cast from IPPrefix to {} not yet supported", resultType->toString());
+    }
+  }
+
+ private:
+  static void castToString(
+      const BaseVector& input,
+      exec::EvalCtx& context,
+      const SelectivityVector& rows,
+      BaseVector& result) {
+    auto* flatResult = result.as<FlatVector<StringView>>();
+    const auto* ipaddresses = input.as<SimpleVector<std::shared_ptr<void>>>();
+
+    context.applyToSelectedNoThrow(rows, [&](auto row) {
+      const auto intAddr =
+          std::static_pointer_cast<IPPrefix>(ipaddresses->valueAt(row));
+      folly::ByteArray16 addrBytes;
+      std::string s;
+
+      memcpy(&addrBytes, &intAddr->ip, 16);
+      bigEndianByteArray(addrBytes);
+      folly::IPAddressV6 v6Addr(addrBytes);
+
+      if (v6Addr.isIPv4Mapped()) {
+        s = v6Addr.createIPv4().str();
+      } else {
+        s = v6Addr.str();
+      }
+      s += "/" + std::to_string((uint8_t)intAddr->prefix);
+      exec::StringWriter<false> result(flatResult, row);
+      result.append(s);
+      result.finalize();
+    });
+  }
+
+  static void castFromString(
+      const BaseVector& input,
+      exec::EvalCtx& context,
+      const SelectivityVector& rows,
+      BaseVector& result) {
+    auto* flatResult = result.as<FlatVector<std::shared_ptr<void>>>();
+    const auto* ipAddressStrings = input.as<SimpleVector<StringView>>();
+
+    context.applyToSelectedNoThrow(rows, [&](auto row) {
+      auto ipAddressString = ipAddressStrings->valueAt(row);
+      folly::CIDRNetwork net =
+          folly::IPAddress::createNetwork(ipAddressString, -1, false);
+      IPPrefix res(0, 0);
+      folly::ByteArray16 addrBytes;
+
+      if (net.first.isIPv4Mapped() || net.first.isV4()) {
+        addrBytes = folly::IPAddress::createIPv4(net.first)
+                        .mask(net.second)
+                        .createIPv6()
+                        .toByteArray();
+      } else {
+        addrBytes = folly::IPAddress::createIPv6(net.first)
+                        .mask(net.second)
+                        .toByteArray();
+      }
+      res.prefix = (uint8_t)net.second;
+
+      bigEndianByteArray(addrBytes);
+      memcpy(&res.ip, &addrBytes, 16);
+
+      flatResult->set(
+          row, std::make_shared<IPPrefix>(res.ip, (uint8_t)res.prefix));
+    });
+  }
+};
+
+class IPPrefixTypeFactories : public CustomTypeFactories {
+ public:
+  TypePtr getType() const override {
+    return IPPrefixType::get();
+  }
+
+  exec::CastOperatorPtr getCastOperator() const override {
+    return std::make_shared<IPPrefixCastOperator>();
+  }
+};
+
+} // namespace
+
+void registerIPPrefixType() {
+  registerCustomType(
+      "ipprefix", std::make_unique<const IPPrefixTypeFactories>());
+}
+
+} // namespace facebook::velox
