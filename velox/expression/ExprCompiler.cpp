@@ -365,9 +365,11 @@ ExprPtr compileRewrittenExpression(
     const std::unordered_set<std::string>& flatteningCandidates,
     bool enableConstantFolding) {
 
-  LOG(ERROR) << "We got here compile";
-  std::cout << "We got here compile" << std::endl;
-  std::cerr << "We got here compile" << std::endl;
+  std::ofstream outfile;
+  outfile.open("/Users/michaelohsaka/a");
+  outfile << "Rewritten";
+  outfile.close();
+
   ExprPtr alreadyCompiled = getAlreadyCompiled(expr.get(), &scope->visited);
   if (alreadyCompiled) {
     if (!alreadyCompiled->isMultiplyReferenced()) {
