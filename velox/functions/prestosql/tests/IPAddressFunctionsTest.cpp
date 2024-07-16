@@ -39,17 +39,17 @@ class IPAddressTest : public functions::test::FunctionBaseTest {
 
   std::optional<std::string> getIPPrefix(
       const std::optional<std::string> input,
-      std::optional<int8_t> mask) {
+      std::optional<int64_t> mask) {
     auto result = evaluateOnce<std::string>(
-        "cast(ip_prefix(cast(c0 as ipaddress), c1) as varchar)", input, mask);
+        "cast(ip_prefix(cast(c0 as ipaddress), c1) as varchar)", {VARCHAR(), BIGINT()}, input, mask);
     return result;
   }
 
   std::optional<std::string> getIPPrefixUsingVarchar(
       const std::optional<std::string> input,
-      std::optional<int8_t> mask) {
+      std::optional<int64_t> mask) {
     auto result = evaluateOnce<std::string>(
-        "cast(ip_prefix(c0, c1) as varchar)", input, mask);
+        "cast(ip_prefix(c0, c1) as varchar)", {VARCHAR(), BIGINT()}, input, mask);
     return result;
   }
 
