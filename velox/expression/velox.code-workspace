@@ -1,0 +1,134 @@
+{
+	"folders": [
+		{
+			"path": "../.."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"__bit_reference": "cpp",
+			"__config": "cpp",
+			"__debug": "cpp",
+			"__errc": "cpp",
+			"__hash_table": "cpp",
+			"__locale": "cpp",
+			"__mutex_base": "cpp",
+			"__node_handle": "cpp",
+			"__split_buffer": "cpp",
+			"__std_stream": "cpp",
+			"__threading_support": "cpp",
+			"__tree": "cpp",
+			"__verbose_abort": "cpp",
+			"any": "cpp",
+			"array": "cpp",
+			"atomic": "cpp",
+			"bitset": "cpp",
+			"cctype": "cpp",
+			"charconv": "cpp",
+			"cinttypes": "cpp",
+			"clocale": "cpp",
+			"cmath": "cpp",
+			"codecvt": "cpp",
+			"complex": "cpp",
+			"condition_variable": "cpp",
+			"cstdarg": "cpp",
+			"cstddef": "cpp",
+			"cstdint": "cpp",
+			"cstdio": "cpp",
+			"cstdlib": "cpp",
+			"cstring": "cpp",
+			"ctime": "cpp",
+			"cwchar": "cpp",
+			"cwctype": "cpp",
+			"deque": "cpp",
+			"exception": "cpp",
+			"coroutine": "cpp",
+			"forward_list": "cpp",
+			"fstream": "cpp",
+			"future": "cpp",
+			"initializer_list": "cpp",
+			"iomanip": "cpp",
+			"ios": "cpp",
+			"iosfwd": "cpp",
+			"iostream": "cpp",
+			"istream": "cpp",
+			"limits": "cpp",
+			"list": "cpp",
+			"locale": "cpp",
+			"map": "cpp",
+			"mutex": "cpp",
+			"new": "cpp",
+			"optional": "cpp",
+			"ostream": "cpp",
+			"queue": "cpp",
+			"ratio": "cpp",
+			"regex": "cpp",
+			"set": "cpp",
+			"shared_mutex": "cpp",
+			"source_location": "cpp",
+			"span": "cpp",
+			"sstream": "cpp",
+			"stack": "cpp",
+			"stdexcept": "cpp",
+			"streambuf": "cpp",
+			"string": "cpp",
+			"string_view": "cpp",
+			"system_error": "cpp",
+			"thread": "cpp",
+			"tuple": "cpp",
+			"typeindex": "cpp",
+			"typeinfo": "cpp",
+			"unordered_map": "cpp",
+			"unordered_set": "cpp",
+			"variant": "cpp",
+			"vector": "cpp",
+			"algorithm": "cpp",
+			"csetjmp": "cpp",
+			"csignal": "cpp",
+			"valarray": "cpp",
+			"*.inc": "cpp",
+			"cfenv": "cpp",
+			"strstream": "cpp"
+		}
+	},
+	"launch": {
+		"version": "0.2.0",
+		"configurations": [
+			{
+			   "name": "(lldb) presto-server attach",
+
+			   "type": "lldb",
+
+			   "request": "attach",
+
+			   "program": "/Users/michaelohsaka/presto/presto-native-execution/_build/debug/presto_cpp/main/presto_server",
+
+			   "cwd": "/Users/michaelohsaka/presto/presto-native-execution",
+
+			   "cdir": "/Users/michaelohsaka/presto/presto-native-execution",
+
+			   "processId": "${command:pickProcess}",
+
+			   "MIMode": "lldb",
+
+			   "setupCommands": [
+
+				{
+
+			   "description": "Enable pretty-printing for lldb",
+
+			   "text": "-enable-pretty-printing",
+
+			   "ignoreFailures": true
+
+				}
+
+				]
+
+			}
+
+		]
+
+	}
+
+}
