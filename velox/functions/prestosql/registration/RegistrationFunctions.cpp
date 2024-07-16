@@ -16,6 +16,7 @@
 #include <string>
 #include "velox/functions/prestosql/UuidFunctions.h"
 #include "velox/functions/prestosql/IPAddressFunctions.h"
+#include <iostream>
 
 namespace facebook::velox::functions {
 
@@ -95,6 +96,9 @@ void registerBitwiseFunctions(const std::string& prefix) {
 }
 
 void registerAllScalarFunctions(const std::string& prefix) {
+  std::cout << "Registering" << std::endl;
+  std::cerr << "Registering" << std::endl;
+  LOG(ERR) << "Registering";
   registerArithmeticFunctions(prefix);
   registerCheckedArithmeticFunctions(prefix);
   registerComparisonFunctions(prefix);
