@@ -363,6 +363,8 @@ ExprPtr compileRewrittenExpression(
     memory::MemoryPool* pool,
     const std::unordered_set<std::string>& flatteningCandidates,
     bool enableConstantFolding) {
+
+  LOG(ERROR) << "We got here compile";
   ExprPtr alreadyCompiled = getAlreadyCompiled(expr.get(), &scope->visited);
   if (alreadyCompiled) {
     if (!alreadyCompiled->isMultiplyReferenced()) {
