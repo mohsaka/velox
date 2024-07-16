@@ -36,6 +36,11 @@ void populateSimpleFunctionSignatures(FunctionSignatureMap& map) {
   const auto& simpleFunctions = exec::simpleFunctions();
   for (const auto& functionName : simpleFunctions.getFunctionNames()) {
     map[functionName] = simpleFunctions.getFunctionSignatures(functionName);
+    if(functionName == "ip_prefix"){
+    for (const auto& signature : simpleFunctions.getFunctionSignatures(functionName)) {
+      LOG(ERROR) << signature->toString();
+    }
+    }
   }
 }
 
