@@ -28,6 +28,7 @@
 #include "velox/expression/SwitchExpr.h"
 #include "velox/expression/TryExpr.h"
 #include "velox/expression/VectorFunction.h"
+#include <iostream>
 
 namespace facebook::velox::exec {
 
@@ -365,6 +366,8 @@ ExprPtr compileRewrittenExpression(
     bool enableConstantFolding) {
 
   LOG(ERROR) << "We got here compile";
+  std::cout << "We got here compile" << std::endl;
+  std::cerr << "We got here compile" << std::endl;
   ExprPtr alreadyCompiled = getAlreadyCompiled(expr.get(), &scope->visited);
   if (alreadyCompiled) {
     if (!alreadyCompiled->isMultiplyReferenced()) {
