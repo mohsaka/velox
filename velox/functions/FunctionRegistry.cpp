@@ -28,6 +28,7 @@
 #include "velox/expression/SimpleFunctionRegistry.h"
 #include "velox/expression/VectorFunction.h"
 #include "velox/type/Type.h"
+#include <iostream>
 
 namespace facebook::velox {
 namespace {
@@ -39,6 +40,8 @@ void populateSimpleFunctionSignatures(FunctionSignatureMap& map) {
     if(functionName == "ip_prefix"){
     for (const auto& signature : simpleFunctions.getFunctionSignatures(functionName)) {
       LOG(ERROR) << signature->toString();
+      std::cout << signature->toString() << std::endl;
+      std::cerr << signature->toString() << std::endl;
     }
     }
   }
