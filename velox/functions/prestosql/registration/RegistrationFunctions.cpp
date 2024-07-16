@@ -98,7 +98,6 @@ void registerBitwiseFunctions(const std::string& prefix) {
 void registerAllScalarFunctions(const std::string& prefix) {
   std::cout << "Registering" << std::endl;
   std::cerr << "Registering" << std::endl;
-  LOG(ERR) << "Registering";
   registerArithmeticFunctions(prefix);
   registerCheckedArithmeticFunctions(prefix);
   registerComparisonFunctions(prefix);
