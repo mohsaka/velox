@@ -41,7 +41,7 @@ class IPPrefixCastOperator : public exec::CastOperator {
       const TypePtr& resultType,
       VectorPtr& result) const override {
     context.ensureWritable(rows, resultType, result);
-    VELOX_UNSUPPORTED(
+    VELOX_NYI(
         "Cast from {} to IPPrefix not yet supported", input.type()->toString());
   }
 
@@ -52,7 +52,7 @@ class IPPrefixCastOperator : public exec::CastOperator {
       const TypePtr& resultType,
       VectorPtr& result) const override {
     context.ensureWritable(rows, resultType, result);
-    VELOX_UNSUPPORTED(
+    VELOX_NYI(
         "Cast from IPPrefix to {} not yet supported", resultType->toString());
   }
 };
