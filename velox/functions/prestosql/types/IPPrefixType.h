@@ -67,7 +67,7 @@ FOLLY_ALWAYS_INLINE std::shared_ptr<const IPPrefixType> IPPREFIX() {
 }
 
 struct IPPrefixT {
-  using type = Varbinary;
+  using type = Row<int128_t, int8_t>;
   static constexpr const char* typeName = "ipprefix";
 };
 
