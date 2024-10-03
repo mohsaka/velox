@@ -184,9 +184,9 @@ create IPPREFIX networks as well as to check IPADDRESS validity within
 IPPREFIX networks.
 
 IPPREFIX represents an IPv6 or IPv4 formatted IPv6 address along with a one byte
-prefix length. Its physical type is VARBINARY but has a fixed length of 17 bytes.
-The format that the address is stored in is defined as part of `RFC 4291#section-2.5.5.2 <https://datatracker.ietf.org/doc/html/rfc4291.html#section-2.5.5.2>`_.
-The prefix length is stored in the last byte of the VARBINARY array.
+prefix length. Its physical type is ROW(HUGEINT, TINYINT). The IPADDRESS is stored in
+the HUGEINT and is in the form defined in `RFC 4291#section-2.5.5.2 <https://datatracker.ietf.org/doc/html/rfc4291.html#section-2.5.5.2>`_.
+The prefix length is stored in the TINYINT.
 The IP address stored is the canonical(smallest) IP address in the
 subnet range. This type can be used in IP subnet functions.
 

@@ -20,8 +20,8 @@
 
 namespace facebook::velox {
 
-class IPPrefixType : public VarbinaryType {
-  IPPrefixType() = default;
+class IPPrefixType : public RowType {
+  IPPrefixType() : RowType({"ip", "prefix_len"}, {HUGEINT(), TINYINT()}) {}
 
  public:
   static const std::shared_ptr<const IPPrefixType>& get() {
@@ -49,6 +49,11 @@ class IPPrefixType : public VarbinaryType {
     obj["name"] = "Type";
     obj["type"] = name();
     return obj;
+  }
+
+  const std::vector<TypeParameter>& parameters() const override {
+    static const std::vector<TypeParameter> kEmpty = {};
+    return kEmpty;
   }
 };
 
