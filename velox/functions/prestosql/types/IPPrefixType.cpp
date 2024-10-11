@@ -16,6 +16,7 @@
 
 #include <folly/IPAddress.h>
 #include <folly/small_vector.h>
+
 #include "velox/expression/CastExpr.h"
 #include "velox/functions/prestosql/types/IPAddressType.h"
 #include "velox/functions/prestosql/types/IPPrefixType.h"
@@ -134,12 +135,18 @@ class IPPrefixCastOperator : public exec::CastOperator {
       exec::EvalCtx& context,
       const SelectivityVector& rows,
       BaseVector& result) {
+    int rowIndex = 0;
+    int128_t intAddr;
     auto* rowResult = result.as<RowVector>();
     const auto* ipAddressStrings = input.as<SimpleVector<StringView>>();
 
-    VectorPtr ip = BaseVector::create(HUGEINT(), input.size(), context.pool());
-    VectorPtr prefix = BaseVector::create(TINYINT(), input.size(), context.pool());
-    RowVectorPtr rowVector = std::make_shared<RowVector>(context.pool(), IPPREFIX(), nullptr, input.size(), {ip, prefix});
+    auto ipNulls = allocateNulls(input.size(), context.pool(), bits::kNull);
+    auto ip = std::make_shared<FlatVector<int128_t>>(context.pool(), HUGEINT(), ipNulls, input.size(), nullptr, std::vector<BufferPtr>{});
+
+    auto prefixNulls = allocateNulls(input.size(), context.pool(), bits::kNull);
+    auto prefix = std::make_shared<FlatVector<int8_t>>(context.pool(), TINYINT(), prefixNulls, input.size(), nullptr, std::vector<BufferPtr>{});
+
+    RowVectorPtr rowResultVector = std::make_shared<RowVector>(context.pool(), IPPREFIX(), nullptr, input.size(), std::vector<VectorPtr>{ip, prefix});
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
       auto ipAddressString = ipAddressStrings->valueAt(row);
@@ -251,9 +258,15 @@ class IPPrefixCastOperator : public exec::CastOperator {
                         .mask(net.second)
                         .toByteArray();
       }
+
+      std::reverse(addrBytes.begin(), addrBytes.end());
+      memcpy(&intAddr, &addrBytes, kIPAddressBytes);
+      ip->set(rowIndex, intAddr);
+      prefix->set(rowIndex, net.second);
+      rowIndex++;
     });
 
-    context.moveOrCopyResult(localResult, rows, result);
+    result = rowResultVector;
   }
 };
 
