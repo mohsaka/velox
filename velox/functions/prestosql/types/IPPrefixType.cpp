@@ -100,16 +100,16 @@ class IPPrefixCastOperator : public exec::CastOperator {
       const SelectivityVector& rows,
       BaseVector& result) {
     auto* flatResult = result.as<FlatVector<StringView>>();
-    //const auto* ipaddresses = input.as<RowVector>();
-    const auto* ipaddresses = input.as<SimpleVector<StringView>>();
-    //auto* ips = ipaddresses->childAt(0)->as<FlatVector<int128_t>>();
-    //auto* prefixes = ipaddresses->childAt(1)->as<FlatVector<int8_t>>();
+    const auto* ipaddresses = input.as<RowVector>();
+    const auto* ip = ipaddresses->childAt(0)->as<FlatVector<int128_t>>();
+    const auto* prefix = ipaddresses->childAt(1)->as<FlatVector<int8_t>>();
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
-      const auto intAddr = ipaddresses->valueAt(row);
+      const auto intAddr = ip->valueAt(row);
       folly::ByteArray16 addrBytes;
-
-      memcpy(&addrBytes, intAddr.data(), kIPAddressBytes);
+      
+      memcpy(&addrBytes, &intAddr, kIPAddressBytes);
+      std::reverse(addrBytes.begin(), addrBytes.end());
       folly::IPAddressV6 v6Addr(addrBytes);
 
       exec::StringWriter<false> resultWriter(flatResult, row);
@@ -117,10 +117,10 @@ class IPPrefixCastOperator : public exec::CastOperator {
         resultWriter.append(fmt::format(
             "{}/{}",
             v6Addr.createIPv4().str(),
-            (uint8_t)intAddr.data()[kIPAddressBytes]));
+            prefix->valueAt(row)));
       } else {
         resultWriter.append(fmt::format(
-            "{}/{}", v6Addr.str(), (uint8_t)intAddr.data()[kIPAddressBytes]));
+            "{}/{}", v6Addr.str(), (uint8_t)prefix->valueAt(row)));
       }
       resultWriter.finalize();
     });
@@ -141,7 +141,6 @@ class IPPrefixCastOperator : public exec::CastOperator {
     int128_t intAddr;
     auto* rowResult = result.as<RowVector>();
 
-    rowResult->resize(input.size());
     const auto* ipAddressStrings = input.as<SimpleVector<StringView>>();
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
@@ -258,10 +257,9 @@ class IPPrefixCastOperator : public exec::CastOperator {
       std::reverse(addrBytes.begin(), addrBytes.end());
       memcpy(&intAddr, &addrBytes, kIPAddressBytes);
       rowResult->childAt(0)->as<FlatVector<int128_t>>()->set(row, intAddr);
-      rowResult->childAt(1)->as<FlatVector<int8_t>>()->set(row, intAddr);
+      rowResult->childAt(1)->as<FlatVector<int8_t>>()->set(row, net.second);
     });
 
-    std::cerr << rowResult->toString();
   }
 };
 
