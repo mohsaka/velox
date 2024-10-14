@@ -20,6 +20,7 @@
 #include "velox/expression/CastExpr.h"
 #include "velox/functions/prestosql/types/IPAddressType.h"
 #include "velox/functions/prestosql/types/IPPrefixType.h"
+#include <iostream>
 
 static constexpr int kIPAddressBytes = 16;
 static constexpr int kIPPrefixBytes = 17;
@@ -101,6 +102,8 @@ class IPPrefixCastOperator : public exec::CastOperator {
     auto* flatResult = result.as<FlatVector<StringView>>();
     //const auto* ipaddresses = input.as<RowVector>();
     const auto* ipaddresses = input.as<SimpleVector<StringView>>();
+    //auto* ips = ipaddresses->childAt(0)->as<FlatVector<int128_t>>();
+    //auto* prefixes = ipaddresses->childAt(1)->as<FlatVector<int8_t>>();
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
       const auto intAddr = ipaddresses->valueAt(row);
@@ -135,18 +138,11 @@ class IPPrefixCastOperator : public exec::CastOperator {
       exec::EvalCtx& context,
       const SelectivityVector& rows,
       BaseVector& result) {
-    int rowIndex = 0;
     int128_t intAddr;
     auto* rowResult = result.as<RowVector>();
+
+    rowResult->resize(input.size());
     const auto* ipAddressStrings = input.as<SimpleVector<StringView>>();
-
-    auto ipNulls = allocateNulls(input.size(), context.pool(), bits::kNull);
-    auto ip = std::make_shared<FlatVector<int128_t>>(context.pool(), HUGEINT(), ipNulls, input.size(), nullptr, std::vector<BufferPtr>{});
-
-    auto prefixNulls = allocateNulls(input.size(), context.pool(), bits::kNull);
-    auto prefix = std::make_shared<FlatVector<int8_t>>(context.pool(), TINYINT(), prefixNulls, input.size(), nullptr, std::vector<BufferPtr>{});
-
-    RowVectorPtr rowResultVector = std::make_shared<RowVector>(context.pool(), IPPREFIX(), nullptr, input.size(), std::vector<VectorPtr>{ip, prefix});
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
       auto ipAddressString = ipAddressStrings->valueAt(row);
@@ -261,12 +257,11 @@ class IPPrefixCastOperator : public exec::CastOperator {
 
       std::reverse(addrBytes.begin(), addrBytes.end());
       memcpy(&intAddr, &addrBytes, kIPAddressBytes);
-      ip->set(rowIndex, intAddr);
-      prefix->set(rowIndex, net.second);
-      rowIndex++;
+      rowResult->childAt(0)->as<FlatVector<int128_t>>()->set(row, intAddr);
+      rowResult->childAt(1)->as<FlatVector<int8_t>>()->set(row, intAddr);
     });
 
-    result = rowResultVector;
+    std::cerr << rowResult->toString();
   }
 };
 
