@@ -20,13 +20,11 @@
 #include "velox/expression/CastExpr.h"
 #include "velox/functions/prestosql/types/IPAddressType.h"
 #include "velox/functions/prestosql/types/IPPrefixType.h"
-#include <iostream>
 
 static constexpr int kIPAddressBytes = 16;
 static constexpr int kIPPrefixBytes = 17;
 static constexpr uint8_t kIPV4Bits = 32;
 static constexpr uint8_t kIPV6Bits = 128;
-
 
 namespace facebook::velox {
 
@@ -107,7 +105,7 @@ class IPPrefixCastOperator : public exec::CastOperator {
     context.applyToSelectedNoThrow(rows, [&](auto row) {
       const auto intAddr = ip->valueAt(row);
       folly::ByteArray16 addrBytes;
-      
+
       memcpy(&addrBytes, &intAddr, kIPAddressBytes);
       std::reverse(addrBytes.begin(), addrBytes.end());
       folly::IPAddressV6 v6Addr(addrBytes);
@@ -115,12 +113,10 @@ class IPPrefixCastOperator : public exec::CastOperator {
       exec::StringWriter<false> resultWriter(flatResult, row);
       if (v6Addr.isIPv4Mapped()) {
         resultWriter.append(fmt::format(
-            "{}/{}",
-            v6Addr.createIPv4().str(),
-            prefix->valueAt(row)));
+            "{}/{}", v6Addr.createIPv4().str(), prefix->valueAt(row)));
       } else {
-        resultWriter.append(fmt::format(
-            "{}/{}", v6Addr.str(), (uint8_t)prefix->valueAt(row)));
+        resultWriter.append(
+            fmt::format("{}/{}", v6Addr.str(), (uint8_t)prefix->valueAt(row)));
       }
       resultWriter.finalize();
     });
@@ -259,7 +255,6 @@ class IPPrefixCastOperator : public exec::CastOperator {
       rowResult->childAt(0)->as<FlatVector<int128_t>>()->set(row, intAddr);
       rowResult->childAt(1)->as<FlatVector<int8_t>>()->set(row, net.second);
     });
-
   }
 };
 
@@ -282,3 +277,4 @@ void registerIPPrefixType() {
 }
 
 } // namespace facebook::velox
+                              
