@@ -277,4 +277,3 @@ void registerIPPrefixType() {
 }
 
 } // namespace facebook::velox
-                              
