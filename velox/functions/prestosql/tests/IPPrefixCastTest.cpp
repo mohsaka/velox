@@ -108,34 +108,34 @@ TEST_F(IPPrefixCastTest, varcharCast) {
 
 TEST_F(IPPrefixCastTest, invalidIPPrefix) {
   VELOX_ASSERT_THROW(
-      castToVarchar("facebook.com/32"), "Invalid IP address 'facebook.com'");
+      castToVarchar("facebook.com/32"), "Cannot cast value to IPPREFIX: facebook.com");
   VELOX_ASSERT_THROW(
-      castToVarchar("localhost/32"), "Invalid IP address 'localhost'");
+      castToVarchar("localhost/32"), "Cannot cast value to IPPREFIX: localhost");
   VELOX_ASSERT_THROW(
       castToVarchar("2001:db8::1::1/128"),
-      "Invalid IP address '2001:db8::1::1'");
+      "Cannot cast value to IPPREFIX: 2001:db8::1::1");
   VELOX_ASSERT_THROW(
       castToVarchar("2001:zxy::1::1/128"),
-      "Invalid IP address '2001:zxy::1::1'");
+      "Cannot cast value to IPPREFIX: 2001:zxy::1::1");
   VELOX_ASSERT_THROW(
-      castToVarchar("789.1.1.1/32"), "Invalid IP address '789.1.1.1'");
+      castToVarchar("789.1.1.1/32"), "Cannot cast value to IPPREFIX: 789.1.1.1");
   VELOX_ASSERT_THROW(
       castToVarchar("192.1.1.1"),
-      "Invalid CIDR IP address specified. Expected IP/PREFIX format, got '192.1.1.1'");
+      "Cannot cast value to IPPREFIX: 192.1.1.1");
   VELOX_ASSERT_THROW(
       castToVarchar("192.1.1.1/128"),
-      "CIDR value '128' is > network bit count '32'");
+      "Cannot cast value to IPPREFIX: 192.1.1.1/128");
   VELOX_ASSERT_THROW(
-      castToVarchar("192.1.1.1/-1"), "Mask value '-1' not a valid mask");
+      castToVarchar("192.1.1.1/-1"), "Cannot cast value to IPPREFIX: 192.1.1.1/-1");
   VELOX_ASSERT_THROW(
       castToVarchar("::ffff:ffff:ffff/33"),
-      "CIDR value '33' is > network bit count '32'");
+      "Cannot cast value to IPPREFIX: ::ffff:ffff:ffff/33");
   VELOX_ASSERT_THROW(
-      castToVarchar("::ffff:ffff:ffff/-1"), "Mask value '-1' not a valid mask");
+      castToVarchar("::ffff:ffff:ffff/-1"), "Cannot cast value to IPPREFIX: ::ffff:ffff:ffff/-1");
   VELOX_ASSERT_THROW(
-      castToVarchar("::/129"), "CIDR value '129' is > network bit count '128'");
+      castToVarchar("::/129"), "Cannot cast value to IPPREFIX: ::/129");
   VELOX_ASSERT_THROW(
-      castToVarchar("::/-1"), "Mask value '-1' not a valid mask");
+      castToVarchar("::/-1"), "Cannot cast value to IPPREFIX: ::/-1");
 }
 
 } // namespace

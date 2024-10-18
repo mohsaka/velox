@@ -98,9 +98,9 @@ class IPPrefixCastOperator : public exec::CastOperator {
       const SelectivityVector& rows,
       BaseVector& result) {
     auto* flatResult = result.as<FlatVector<StringView>>();
-    const auto* ipaddresses = input.as<RowVector>();
-    const auto* ip = ipaddresses->childAt(0)->as<FlatVector<int128_t>>();
-    const auto* prefix = ipaddresses->childAt(1)->as<FlatVector<int8_t>>();
+    const auto* ipprefixes = input.as<RowVector>();
+    const auto* ip = ipprefixes->childAt(0)->as<FlatVector<int128_t>>();
+    const auto* prefix = ipprefixes->childAt(1)->as<FlatVector<int8_t>>();
 
     context.applyToSelectedNoThrow(rows, [&](auto row) {
       const auto intAddr = ip->valueAt(row);
@@ -150,7 +150,7 @@ class IPPrefixCastOperator : public exec::CastOperator {
             threadSkipErrorDetails()
                 ? Status::UserError()
                 : Status::UserError(
-                      "Invalid CIDR IP address specified. Expected IP/PREFIX format, got '{}'",
+                      "Cannot cast value to IPPREFIX: {}",
                       ipAddressString.str()));
         return;
       }
@@ -163,55 +163,14 @@ class IPPrefixCastOperator : public exec::CastOperator {
         if (threadSkipErrorDetails()) {
           context.setStatus(row, Status::UserError());
         } else {
-          switch (maybeNet.error()) {
-            case folly::CIDRNetworkError::INVALID_DEFAULT_CIDR:
-              context.setStatus(
-                  row, Status::UserError("defaultCidr must be <= UINT8_MAX"));
-              break;
-            case folly::CIDRNetworkError::INVALID_IP_SLASH_CIDR:
-              context.setStatus(
-                  row,
-                  Status::UserError(
-                      "Invalid CIDR IP address specified. Expected IP/PREFIX format, got '{}'",
+          context.setStatus(
+            row,
+            threadSkipErrorDetails()
+                ? Status::UserError()
+                : Status::UserError(
+                      "Cannot cast value to IPPREFIX: {}",
                       ipAddressString.str()));
-              break;
-            case folly::CIDRNetworkError::INVALID_IP: {
-              auto const vec = splitIpSlashCidr(ipAddressString);
-              context.setStatus(
-                  row,
-                  Status::UserError(
-                      "Invalid IP address '{}'",
-                      vec.size() > 0 ? vec.at(0) : ""));
-              break;
-            }
-            case folly::CIDRNetworkError::INVALID_CIDR: {
-              auto const vec = splitIpSlashCidr(ipAddressString);
-              context.setStatus(
-                  row,
-                  Status::UserError(
-                      "Mask value '{}' not a valid mask",
-                      vec.size() > 1 ? vec.at(1) : ""));
-              break;
-            }
-            case folly::CIDRNetworkError::CIDR_MISMATCH: {
-              auto const vec = splitIpSlashCidr(ipAddressString);
-              auto const subnet =
-                  folly::IPAddress::tryFromString(vec.at(0)).value();
-              context.setStatus(
-                  row,
-                  Status::UserError(
-                      "CIDR value '{}' is > network bit count '{}'",
-                      vec.size() == 2
-                          ? vec.at(1)
-                          : folly::to<std::string>(
-                                subnet.isV4() ? kIPV4Bits : kIPV6Bits),
-                      subnet.bitCount()));
-              break;
-            }
-            default:
-              context.setStatus(row, Status::UserError());
-              break;
-          }
+          return;
         }
         return;
       }
@@ -220,13 +179,12 @@ class IPPrefixCastOperator : public exec::CastOperator {
       if (net.first.isIPv4Mapped() || net.first.isV4()) {
         if (net.second > kIPV4Bits) {
           context.setStatus(
-              row,
-              threadSkipErrorDetails()
-                  ? Status::UserError()
-                  : Status::UserError(
-                        "CIDR value '{}' is > network bit count '{}'",
-                        net.second,
-                        kIPV4Bits));
+            row,
+            threadSkipErrorDetails()
+                ? Status::UserError()
+                : Status::UserError(
+                      "Cannot cast value to IPPREFIX: {}",
+                      ipAddressString.str()));
           return;
         }
         addrBytes = folly::IPAddress::createIPv4(net.first)
@@ -236,13 +194,12 @@ class IPPrefixCastOperator : public exec::CastOperator {
       } else {
         if (net.second > kIPV6Bits) {
           context.setStatus(
-              row,
-              threadSkipErrorDetails()
-                  ? Status::UserError()
-                  : Status::UserError(
-                        "CIDR value '{}' is > network bit count '{}'",
-                        net.second,
-                        kIPV6Bits));
+            row,
+            threadSkipErrorDetails()
+                ? Status::UserError()
+                : Status::UserError(
+                      "Cannot cast value to IPPREFIX: {}",
+                      ipAddressString.str()));
           return;
         }
         addrBytes = folly::IPAddress::createIPv6(net.first)

@@ -1219,11 +1219,11 @@ Invalid examples:
 
 ::
 
-  SELECT cast('2001:db8::1::1/1' as ipprefix); -- Invalid IP address '2001:db8::1::1'
-  SELECT cast('2001:0db8:0000:0000:0000:ff00:0042:8329/129' as ipprefix); -- CIDR value '129' is > network bit count '128'
-  SELECT cast('2001:0db8:0000:0000:0000:ff00:0042:8329/-1' as ipprefix); -- Mask value '-1' not a valid mask
-  SELECT cast('255.2.3.4/33' as ipprefix); -- CIDR value '33' is > network bit count '32'
-  SELECT cast('::ffff:ffff:ffff/33' as ipprefix); -- CIDR value '33' is > network bit count '32'
+  SELECT cast('2001:db8::1::1/1' as ipprefix); -- Cannot cast value to IPPREFIX: 2001:db8::1::1/1
+  SELECT cast('2001:0db8:0000:0000:0000:ff00:0042:8329/129' as ipprefix); -- Cannot cast value to IPPREFIX: 2001:0db8:0000:0000:0000:ff00:0042:8329/129
+  SELECT cast('2001:0db8:0000:0000:0000:ff00:0042:8329/-1' as ipprefix); -- Cannot cast value to IPPREFIX: 2001:0db8:0000:0000:0000:ff00:0042:8329/-1
+  SELECT cast('255.2.3.4/33' as ipprefix); -- Cannot cast value to IPPREFIX: 255.2.3.4/33
+  SELECT cast('::ffff:ffff:ffff/33' as ipprefix); -- Cannot cast value to IPPREFIX: ::ffff:ffff:ffff/33
 
 Miscellaneous
 -------------
