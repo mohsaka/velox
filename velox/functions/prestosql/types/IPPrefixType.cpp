@@ -129,6 +129,21 @@ class IPPrefixCastOperator : public exec::CastOperator {
     return vec;
   }
 
+  static void setStringCastError(exec::EvalCtx& context, unsigned long row, const folly::StringPiece& ipString){
+    if (threadSkipErrorDetails()) {
+      context.setStatus(row, Status::UserError());
+    } else {
+      context.setStatus(
+        row,
+        threadSkipErrorDetails()
+          ? Status::UserError()
+          : Status::UserError(
+              "Cannot cast value to IPPREFIX: {}",
+              ipString.str()));
+          return;
+        }
+  }
+
   static void castFromString(
       const BaseVector& input,
       exec::EvalCtx& context,
@@ -145,13 +160,7 @@ class IPPrefixCastOperator : public exec::CastOperator {
       // Folly allows for creation of networks without a "/" so check to make
       // sure that we have one.
       if (ipAddressString.str().find('/') == std::string::npos) {
-        context.setStatus(
-            row,
-            threadSkipErrorDetails()
-                ? Status::UserError()
-                : Status::UserError(
-                      "Cannot cast value to IPPREFIX: {}",
-                      ipAddressString.str()));
+        setStringCastError(context, row, ipAddressString);
         return;
       }
 
@@ -160,31 +169,13 @@ class IPPrefixCastOperator : public exec::CastOperator {
           folly::IPAddress::tryCreateNetwork(ipAddressString, -1, false);
 
       if (maybeNet.hasError()) {
-        if (threadSkipErrorDetails()) {
-          context.setStatus(row, Status::UserError());
-        } else {
-          context.setStatus(
-            row,
-            threadSkipErrorDetails()
-                ? Status::UserError()
-                : Status::UserError(
-                      "Cannot cast value to IPPREFIX: {}",
-                      ipAddressString.str()));
-          return;
-        }
-        return;
+        setStringCastError(context, row, ipAddressString);
       }
 
       auto net = maybeNet.value();
       if (net.first.isIPv4Mapped() || net.first.isV4()) {
         if (net.second > kIPV4Bits) {
-          context.setStatus(
-            row,
-            threadSkipErrorDetails()
-                ? Status::UserError()
-                : Status::UserError(
-                      "Cannot cast value to IPPREFIX: {}",
-                      ipAddressString.str()));
+          setStringCastError(context, row, ipAddressString);
           return;
         }
         addrBytes = folly::IPAddress::createIPv4(net.first)
@@ -193,13 +184,7 @@ class IPPrefixCastOperator : public exec::CastOperator {
                         .toByteArray();
       } else {
         if (net.second > kIPV6Bits) {
-          context.setStatus(
-            row,
-            threadSkipErrorDetails()
-                ? Status::UserError()
-                : Status::UserError(
-                      "Cannot cast value to IPPREFIX: {}",
-                      ipAddressString.str()));
+          setStringCastError(context, row, ipAddressString);
           return;
         }
         addrBytes = folly::IPAddress::createIPv6(net.first)
