@@ -17,33 +17,31 @@
 # VELOX_TEST_DYNAMIC_LIBRARY_PATH macro to locate the .so binary.
 
 add_library(velox_function_my_dynamic SHARED MyDynamicFunction.cpp)
-add_library(velox_int_function_my_dynamic SHARED MyDynamicIntFunction.cpp)
-add_library(velox_str_function_my_dynamic SHARED MyDynamicStrFunction.cpp)
-add_library(velox_function_same_twice_my_dynamic SHARED
-            MyDynamicSameTwiceFunction.cpp)
+add_library(velox_overwrite_int_function_my_dynamic SHARED
+            MyDynamicIntFunctionOverwrite.cpp)
+add_library(velox_overwrite_varchar_function_my_dynamic SHARED
+            MyDynamicVarcharFunctionOverwrite.cpp)
 add_library(velox_function_err_my_dynamic SHARED MyDynamicErrFunction.cpp)
-add_library(velox_int_function_my_dynamic_2 SHARED MyDynamicIntFunction2.cpp)
-add_library(velox_str_function_my_dynamic_2 SHARED MyDynamicStrFunction2.cpp)
+add_library(velox_overload_int_function_my_dynamic SHARED
+            MyDynamicIntFunctionOverload.cpp)
+add_library(velox_overload_varchar_function_my_dynamic SHARED
+            MyDynamicVarcharFunctionOverload.cpp)
 
 if(APPLE)
-  set(CMAKE_DYLIB_TEST_LINK_LIBRARIES fmt::fmt Folly::folly gflags::gflags
-                                      xsimd)
+  set(CMAKE_DYLIB_TEST_LINK_LIBRARIES Folly::folly xsimd)
   target_link_libraries(velox_function_my_dynamic
                         PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
-  target_link_libraries(velox_int_function_my_dynamic
+  target_link_libraries(velox_overwrite_int_function_my_dynamic
                         PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
-  target_link_libraries(velox_str_function_my_dynamic
+  target_link_libraries(velox_overwrite_varchar_function_my_dynamic
                         PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
-  target_link_libraries(velox_int_function_my_dynamic_2
+  target_link_libraries(velox_overload_int_function_my_dynamic
                         PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
-  target_link_libraries(velox_str_function_my_dynamic_2
-                        PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
-
-  target_link_libraries(velox_function_same_twice_my_dynamic
+  target_link_libraries(velox_overload_varchar_function_my_dynamic
                         PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
   target_link_libraries(velox_function_err_my_dynamic
@@ -51,42 +49,37 @@ if(APPLE)
 
   target_link_options(velox_function_my_dynamic PRIVATE
                       "-Wl,-undefined,dynamic_lookup")
-  target_link_options(velox_int_function_my_dynamic PRIVATE
+  target_link_options(velox_overwrite_int_function_my_dynamic PRIVATE
                       "-Wl,-undefined,dynamic_lookup")
-  target_link_options(velox_str_function_my_dynamic PRIVATE
-                      "-Wl,-undefined,dynamic_lookup")
-  target_link_options(velox_function_same_twice_my_dynamic PRIVATE
+  target_link_options(velox_overwrite_varchar_function_my_dynamic PRIVATE
                       "-Wl,-undefined,dynamic_lookup")
   target_link_options(velox_function_err_my_dynamic PRIVATE
                       "-Wl,-undefined,dynamic_lookup")
-  target_link_options(velox_int_function_my_dynamic_2 PRIVATE
+  target_link_options(velox_overload_int_function_my_dynamic PRIVATE
                       "-Wl,-undefined,dynamic_lookup")
-  target_link_options(velox_str_function_my_dynamic_2 PRIVATE
+  target_link_options(velox_overload_varchar_function_my_dynamic PRIVATE
                       "-Wl,-undefined,dynamic_lookup")
 
 else()
   set(CMAKE_DYLIB_TEST_LINK_LIBRARIES fmt::fmt xsimd)
 
   target_link_libraries(velox_function_my_dynamic
-                        ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
+                        PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
-  target_link_libraries(velox_int_function_my_dynamic
-                        ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
+  target_link_libraries(velox_overwrite_int_function_my_dynamic
+                        PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
-  target_link_libraries(velox_str_function_my_dynamic
-                        ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
-
-  target_link_libraries(velox_function_same_twice_my_dynamic
-                        ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
+  target_link_libraries(velox_overwrite_varchar_function_my_dynamic
+                        PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
   target_link_libraries(velox_function_err_my_dynamic
-                        ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
+                        PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
-  target_link_libraries(velox_int_function_my_dynamic_2
-                        ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
+  target_link_libraries(velox_overload_int_function_my_dynamic
+                        PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
-  target_link_libraries(velox_str_function_my_dynamic_2
-                        ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
+  target_link_libraries(velox_overload_str_function_my_dynamic
+                        PRIVATE ${CMAKE_DYLIB_TEST_LINK_LIBRARIES})
 
 endif()
 

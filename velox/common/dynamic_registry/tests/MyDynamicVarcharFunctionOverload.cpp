@@ -13,7 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "velox/common/dynamic_registry/DynamicFunctionRegistrar.h"
+#include "velox/functions/Macros.h"
+#include "velox/functions/Registerer.h"
 
 // This file defines a mock function that will be dynamically linked and
 // registered. There are no restrictions as to how the function needs to be
@@ -27,8 +28,11 @@ namespace facebook::velox::common::dynamicRegistry {
 
 template <typename T>
 struct Dynamic123Function {
-  FOLLY_ALWAYS_INLINE bool call(int64_t& result) {
-    result = 123;
+  VELOX_DEFINE_FUNCTION_TYPES(T);
+  FOLLY_ALWAYS_INLINE bool call(
+      out_type<Varchar>& result,
+      const arg_type<Varchar>& in) {
+    result = in;
     return true;
   }
 };
@@ -38,8 +42,9 @@ struct Dynamic123Function {
 extern "C" {
 
 void registry() {
-  facebook::velox::common::registerFunctionWrapper<
+  facebook::velox::registerFunction<
       facebook::velox::common::dynamicRegistry::Dynamic123Function,
-      int64_t>({"dynamic_3"});
+      facebook::velox::Varchar,
+      facebook::velox::Varchar>({"dynamic_overload"});
 }
 }

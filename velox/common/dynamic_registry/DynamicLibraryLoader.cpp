@@ -33,7 +33,7 @@ void loadDynamicLibrary(const char* fileName) {
   // Lookup the symbol.
   void* registrySymbol = dlsym(handler, kSymbolName);
   auto loadUserLibrary = reinterpret_cast<void (*)()>(registrySymbol);
-  char* error = dlerror();
+  const char* error = dlerror();
 
   if (error != nullptr) {
     VELOX_USER_FAIL("Couldn't find Velox registry symbol: {}", error);

@@ -33,13 +33,17 @@ std::string getLibraryPath(const std::string& filename) {
 
 TEST_F(DynamicLinkTest, dynamicLoadFunc) {
   const auto dynamicFunction = [&](std::optional<double> a) {
-    return evaluateOnce<int64_t>("dynamic_1()", a);
+    return evaluateOnce<int64_t>("dynamic()", a);
+  };
+
+  const auto dynamicFunctionNestedCall = [&](std::optional<double> a) {
+    return evaluateOnce<int64_t>("mod(dynamic(), 10)", a);
   };
 
   auto signaturesBefore = getFunctionSignatures().size();
 
   VELOX_ASSERT_THROW(
-      dynamicFunction(0), "Scalar function doesn't exist: dynamic_1.");
+      dynamicFunction(0), "Scalar function doesn't exist: dynamic.");
 
   std::string libraryPath = getLibraryPath("libvelox_function_my_dynamic");
   loadDynamicLibrary(libraryPath.data());
@@ -48,90 +52,85 @@ TEST_F(DynamicLinkTest, dynamicLoadFunc) {
   EXPECT_EQ(123, dynamicFunction(0));
 
   auto& registry = exec::simpleFunctions();
-  auto resolved = registry.resolveFunction("dynamic_1", {});
+  auto resolved = registry.resolveFunction("dynamic", {});
   EXPECT_EQ(TypeKind::BIGINT, resolved->type()->kind());
+
+  EXPECT_EQ(3, dynamicFunctionNestedCall(0));
 }
 
 TEST_F(DynamicLinkTest, dynamicLoadSameFuncTwice) {
   const auto dynamicFunction = [&](std::optional<double> a) {
-    return evaluateOnce<int64_t>("dynamic_2()", a);
+    return evaluateOnce<int64_t>("dynamic()", a);
   };
   auto& registry = exec::simpleFunctions();
   auto signaturesBefore = getFunctionSignatures().size();
 
-  VELOX_ASSERT_THROW(
-      dynamicFunction(0), "Scalar function doesn't exist: dynamic_2.");
-
-  std::string libraryPath =
-      getLibraryPath("libvelox_function_same_twice_my_dynamic");
-  loadDynamicLibrary(libraryPath.data());
-  auto signaturesAfterFirst = getFunctionSignatures().size();
-  EXPECT_EQ(signaturesAfterFirst, signaturesBefore + 1);
-  EXPECT_EQ(123, dynamicFunction(0));
-  auto resolvedAfterFirst = registry.resolveFunction("dynamic_2", {});
-  EXPECT_EQ(TypeKind::BIGINT, resolvedAfterFirst->type()->kind());
+  std::string libraryPath = getLibraryPath("libvelox_function_my_dynamic");
 
   loadDynamicLibrary(libraryPath.data());
   auto signaturesAfterSecond = getFunctionSignatures().size();
-  EXPECT_EQ(signaturesAfterSecond, signaturesAfterFirst);
-  auto resolvedAfterSecond = registry.resolveFunction("dynamic_2", {});
+  EXPECT_EQ(signaturesAfterSecond, signaturesBefore);
+  auto resolvedAfterSecond = registry.resolveFunction("dynamic", {});
   EXPECT_EQ(TypeKind::BIGINT, resolvedAfterSecond->type()->kind());
 }
 
-TEST_F(DynamicLinkTest, dynamicLoadTwoOfTheSameName) {
-  const auto dynamicFunctionInt = [&](std::optional<double> a) {
-    return evaluateOnce<int64_t>("dynamic_3()", a);
+TEST_F(DynamicLinkTest, dynamicLoadOverwriteFunc) {
+  const auto dynamicIntFunction = [&](std::optional<double> a) {
+    return evaluateOnce<int64_t>("dynamic_overwrite()", a);
   };
-  const auto dynamicFunctionStr = [&](std::optional<std::string> a) {
-    return evaluateOnce<std::string>("dynamic_3()", a);
+  const auto dynamicVarcharFunction = [&](std::optional<std::string> a) {
+    return evaluateOnce<std::string>("dynamic_overwrite()", a);
   };
 
   auto& registry = exec::simpleFunctions();
   auto signaturesBefore = getFunctionSignatures().size();
 
   VELOX_ASSERT_THROW(
-      dynamicFunctionStr("0"), "Scalar function doesn't exist: dynamic_3.");
+      dynamicVarcharFunction("0"),
+      "Scalar function doesn't exist: dynamic_overwrite.");
 
-  std::string libraryPath = getLibraryPath("libvelox_str_function_my_dynamic");
+  std::string libraryPath =
+      getLibraryPath("libvelox_overwrite_varchar_function_my_dynamic");
   loadDynamicLibrary(libraryPath.data());
   auto signaturesAfterFirst = getFunctionSignatures().size();
   EXPECT_EQ(signaturesAfterFirst, signaturesBefore + 1);
-  EXPECT_EQ("123", dynamicFunctionStr("0"));
-  auto resolved = registry.resolveFunction("dynamic_3", {});
+  EXPECT_EQ("123", dynamicVarcharFunction("0"));
+  auto resolved = registry.resolveFunction("dynamic_overwrite", {});
   EXPECT_EQ(TypeKind::VARCHAR, resolved->type()->kind());
 
   VELOX_ASSERT_THROW(
-      dynamicFunctionInt(0),
-      "Expression evaluation result is not of expected type: dynamic_3() -> CONSTANT vector of type VARCHAR");
+      dynamicIntFunction(0),
+      "Expression evaluation result is not of expected type: dynamic_overwrite() -> CONSTANT vector of type VARCHAR");
 
   std::string libraryPathInt =
-      getLibraryPath("libvelox_int_function_my_dynamic");
+      getLibraryPath("libvelox_overwrite_int_function_my_dynamic");
   loadDynamicLibrary(libraryPathInt.data());
 
   // The first function loaded should be rewritten.
   VELOX_ASSERT_THROW(
-      dynamicFunctionStr("0"),
-      "Expression evaluation result is not of expected type: dynamic_3() -> CONSTANT vector of type BIGINT");
-  EXPECT_EQ(123, dynamicFunctionInt(0));
+      dynamicVarcharFunction("0"),
+      "Expression evaluation result is not of expected type: dynamic_overwrite() -> CONSTANT vector of type BIGINT");
+  EXPECT_EQ(123, dynamicIntFunction(0));
   auto signaturesAfterSecond = getFunctionSignatures().size();
   EXPECT_EQ(signaturesAfterSecond, signaturesAfterFirst);
-  auto resolvedAfterSecond = registry.resolveFunction("dynamic_3", {});
+  auto resolvedAfterSecond = registry.resolveFunction("dynamic_overwrite", {});
   EXPECT_EQ(TypeKind::BIGINT, resolvedAfterSecond->type()->kind());
 }
 
 TEST_F(DynamicLinkTest, dynamicLoadErrFunc) {
-  const auto dynamicFunctionErr = [&](const std::optional<int64_t> a,
-                                      std::optional<int64_t> b) {
-    return evaluateOnce<int64_t>("dynamic_4(c0)", a, b);
+  const auto dynamicFunctionFail = [&](const std::optional<int64_t> a,
+                                       std::optional<int64_t> b) {
+    return evaluateOnce<int64_t>("dynamic_err(c0)", a, b);
   };
 
-  const auto dynamicFunction = [&](const facebook::velox::RowVectorPtr& arr) {
-    return evaluateOnce<int64_t>("dynamic_4(c0)", arr);
-  };
+  const auto dynamicFunctionSuccess =
+      [&](const facebook::velox::RowVectorPtr& arr) {
+        return evaluateOnce<int64_t>("dynamic_err(c0)", arr);
+      };
 
   auto signaturesBefore = getFunctionSignatures().size();
   VELOX_ASSERT_THROW(
-      dynamicFunctionErr(0, 0), "Scalar function doesn't exist: dynamic_4.");
+      dynamicFunctionFail(0, 0), "Scalar function doesn't exist: dynamic_err.");
 
   std::string libraryPath = getLibraryPath("libvelox_function_err_my_dynamic");
   loadDynamicLibrary(libraryPath.data());
@@ -141,55 +140,57 @@ TEST_F(DynamicLinkTest, dynamicLoadErrFunc) {
 
   // Expecting a fail because we are not passing in an array.
   VELOX_ASSERT_THROW(
-      dynamicFunctionErr(0, 0),
-      "Scalar function signature is not supported: dynamic_4(BIGINT). Supported signatures: (array(bigint)) -> bigint.");
+      dynamicFunctionFail(0, 0),
+      "Scalar function signature is not supported: dynamic_err(BIGINT). Supported signatures: (array(bigint)) -> bigint.");
 
   auto check = makeRowVector(
       {makeNullableArrayVector(std::vector<std::vector<std::optional<int64_t>>>{
           {0, 1, 3, 4, 5, 6, 7, 8, 9}})});
 
   // Expecting a success because we are passing in an array.
-  EXPECT_EQ(9, dynamicFunction(check));
+  EXPECT_EQ(9, dynamicFunctionSuccess(check));
 }
 
-TEST_F(DynamicLinkTest, dynamicLoadTwoOfDiffNames) {
-  const auto dynamicFunctionInt = [&](const std::optional<int64_t> a) {
-    return evaluateOnce<int64_t>("dynamic_5(c0)", a);
+TEST_F(DynamicLinkTest, dynamicLoadOverloadFunc) {
+  const auto dynamicIntFunction = [&](const std::optional<int64_t> a) {
+    return evaluateOnce<int64_t>("dynamic_overload(c0)", a);
   };
-  const auto dynamicFunctionStr = [&](const std::optional<std::string> a) {
-    return evaluateOnce<std::string>("dynamic_5(c0)", a);
+  const auto dynamicStringFunction = [&](const std::optional<std::string> a) {
+    return evaluateOnce<std::string>("dynamic_overload(c0)", a);
   };
 
   auto& registry = exec::simpleFunctions();
   auto signaturesBefore = getFunctionSignatures().size();
 
   VELOX_ASSERT_THROW(
-      dynamicFunctionStr("1"), "Scalar function doesn't exist: dynamic_5.");
+      dynamicStringFunction("1"),
+      "Scalar function doesn't exist: dynamic_overload.");
 
   std::string libraryPath =
-      getLibraryPath("libvelox_str_function_my_dynamic_2");
+      getLibraryPath("libvelox_overload_varchar_function_my_dynamic");
   loadDynamicLibrary(libraryPath.data());
   auto signaturesAfterFirst = getFunctionSignatures().size();
   EXPECT_EQ(signaturesAfterFirst, signaturesBefore + 1);
-  EXPECT_EQ("1", dynamicFunctionStr("1"));
-  auto resolved = registry.resolveFunction("dynamic_5", {VARCHAR()});
+  EXPECT_EQ("1", dynamicStringFunction("1"));
+  auto resolved = registry.resolveFunction("dynamic_overload", {VARCHAR()});
   EXPECT_EQ(TypeKind::VARCHAR, resolved->type()->kind());
 
   // We expect no dynamic_5 with int arguments yet.
   VELOX_ASSERT_THROW(
-      dynamicFunctionInt(0),
-      "Scalar function signature is not supported: dynamic_5(BIGINT). Supported signatures: (varchar) -> varchar.");
+      dynamicIntFunction(0),
+      "Scalar function signature is not supported: dynamic_overload(BIGINT). Supported signatures: (varchar) -> varchar.");
 
   std::string libraryPathInt =
-      getLibraryPath("libvelox_int_function_my_dynamic_2");
+      getLibraryPath("libvelox_overload_int_function_my_dynamic");
   loadDynamicLibrary(libraryPathInt.data());
 
   // The first function loaded should NOT be rewritten.
-  EXPECT_EQ("0", dynamicFunctionStr("0"));
-  EXPECT_EQ(0, dynamicFunctionInt(0));
+  EXPECT_EQ("0", dynamicStringFunction("0"));
+  EXPECT_EQ(0, dynamicIntFunction(0));
   auto signaturesAfterSecond = getFunctionSignatures().size();
   EXPECT_EQ(signaturesAfterSecond, signaturesAfterFirst);
-  auto resolvedAfterSecond = registry.resolveFunction("dynamic_5", {BIGINT()});
+  auto resolvedAfterSecond =
+      registry.resolveFunction("dynamic_overload", {BIGINT()});
   EXPECT_EQ(TypeKind::BIGINT, resolvedAfterSecond->type()->kind());
 }
 
