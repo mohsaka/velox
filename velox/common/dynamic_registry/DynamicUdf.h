@@ -13,6 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+// This header must be included in any dynamically loaded user-defined
+// function library. It enforces the correct function declaration with
+// the proper signature.
 #pragma once
 
 #include "velox/functions/Udf.h"

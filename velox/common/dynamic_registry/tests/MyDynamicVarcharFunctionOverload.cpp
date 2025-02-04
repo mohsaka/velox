@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include "velox/functions/DynamicUdf.h"
+#include "velox/common/dynamic_registry/DynamicUdf.h"
 
 // This file defines a mock function that will be dynamically linked and
 // registered. There are no restrictions as to how the function needs to be

@@ -63,9 +63,13 @@ TEST_F(DynamicLinkTest, dynamicLoadSameFuncTwice) {
     return evaluateOnce<int64_t>("dynamic()", a);
   };
   auto& registry = exec::simpleFunctions();
-  auto signaturesBefore = getFunctionSignatures().size();
-
   std::string libraryPath = getLibraryPath("libvelox_function_my_dynamic");
+
+  loadDynamicLibrary(libraryPath.data());
+  auto resolved = registry.resolveFunction("dynamic", {});
+  EXPECT_EQ(TypeKind::BIGINT, resolved->type()->kind());
+
+  auto signaturesBefore = getFunctionSignatures().size();
 
   loadDynamicLibrary(libraryPath.data());
   auto signaturesAfterSecond = getFunctionSignatures().size();
