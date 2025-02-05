@@ -22,6 +22,8 @@
 #include "velox/functions/Udf.h"
 
 extern "C" {
+// The "registry()" declaration and "check()" function ensure the correct 
+// registry signature function is defined by the user.
 void registry();
 void check() {
   registry();

@@ -32,10 +32,12 @@ namespace facebook::velox {
 /// The function uses dlopen to load the shared library.
 /// It then searches for the "void registry()" C function which typically
 /// contains all the registration code for the UDFs defined in library. After
-/// locating the function it executes the registration bringing the UDFs in the
-/// scope of the Velox runtime.
+/// locating the function it executes the registration bringing the
+/// user-defined Velox components such as function in the scope of the
+/// Velox runtime.
 ///
-/// If the same library is loaded twice then a no-op scenerio will happen.
+/// Loading a library twice can cause a module to be registered twice. 
+/// This can fail for certain Velox modules.
 
 void loadDynamicLibrary(const char* fileName);
 

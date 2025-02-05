@@ -13,20 +13,14 @@ Make sure to also include the necessary header file:
 2. Register functions dynamically by creating .dylib (MacOS) or .so (Linux) shared libraries.
 These shared libraries may be made using CMakeLists like the following:
 
-* Linux
+    ```
+        add_library(name_of_dynamic_fn SHARED TestFunction.cpp)
+        target_link_libraries(name_of_dynamic_fn PRIVATE fmt::fmt glog::glog xsimd)
+        target_link_options(name_of_dynamic_fn PRIVATE "-Wl,-undefined,dynamic_lookup")
+    ```
+    Above, the `fmt::fmt` and `xsimd` libraries are required for all necessary symbols 
+    to be defined when loading the `TestFunction.cpp` dynamically. 
+    Additionally `glog::glog` is currently required on MacOs. 
+    The `target_link_options` allows for symbols to be resolved at runtime on MacOS. 
 
-    ```
-    add_library(name_of_dynamic_fn SHARED TestFunction.cpp)
-    target_link_libraries(name_of_dynamic_fn PRIVATE xsimd fmt::fmt)
-    ```
-    Above, the xsimd and fmt::fmt libraries are required for all necessary symbols to be defined when loading the TestFunction.cpp dynamically
-* MacOS:
-    ```
-    add_library(name_of_dynamic_fn SHARED TestFunction.cpp)
-    target_link_libraries(name_of_dynamic_fn PRIVATE Folly::folly xsimd)
-    ``` 
-
-    Additionally, the below flag allows symbols to be resolved at runtime:
-    ```
-    target_link_options(name_of_dynamic_fn PRIVATE "-Wl,-undefined,dynamic_lookup")
-    ```
+    On Linux `glog::glog` and the `target_link_options` are optional.

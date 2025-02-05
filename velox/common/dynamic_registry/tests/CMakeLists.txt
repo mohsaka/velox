@@ -72,7 +72,7 @@ add_executable(velox_function_dynamic_link_test DynamicLinkTest.cpp)
 target_link_libraries(
   velox_function_dynamic_link_test
   velox_functions_test_lib
-  velox_dynamic_function_loader
+  velox_dynamic_library_loader
   velox_function_registry
   xsimd
   GTest::gmock

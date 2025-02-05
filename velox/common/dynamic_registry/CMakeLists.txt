@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-velox_add_library(velox_dynamic_function_loader DynamicLibraryLoader.cpp)
+velox_add_library(velox_dynamic_library_loader DynamicLibraryLoader.cpp)
 
-velox_link_libraries(velox_dynamic_function_loader PRIVATE velox_exception)
+velox_link_libraries(velox_dynamic_library_loader PRIVATE velox_exception)
 
 if(${VELOX_BUILD_TESTING})
   add_subdirectory(tests)
