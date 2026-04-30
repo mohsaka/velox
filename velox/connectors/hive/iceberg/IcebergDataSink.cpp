@@ -317,14 +317,17 @@ IcebergDataSink::IcebergDataSink(
   commitPartitionValue_.resize(maxOpenWriters_);
 
 #ifdef VELOX_ENABLE_PARQUET
-  std::vector<IcebergColumnHandlePtr> columnHandles;
-  columnHandles.reserve(insertTableHandle->inputColumns().size());
-  for (auto& column : insertTableHandle->inputColumns()) {
-    columnHandles.emplace_back(
-        checkedPointerCast<const IcebergColumnHandle>(column));
+  // Only initialize Parquet stats collector for Parquet format tables
+  if (insertTableHandle->storageFormat() == dwio::common::FileFormat::PARQUET) {
+    std::vector<IcebergColumnHandlePtr> columnHandles;
+    columnHandles.reserve(insertTableHandle->inputColumns().size());
+    for (auto& column : insertTableHandle->inputColumns()) {
+      columnHandles.emplace_back(
+          checkedPointerCast<const IcebergColumnHandle>(column));
+    }
+    parquetStatsCollector_ =
+        std::make_shared<IcebergParquetStatsCollector>(std::move(columnHandles));
   }
-  parquetStatsCollector_ =
-      std::make_shared<IcebergParquetStatsCollector>(std::move(columnHandles));
 #endif
 }
 
