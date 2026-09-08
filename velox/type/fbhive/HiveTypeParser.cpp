@@ -135,6 +135,8 @@ Result HiveTypeParser::parseType() {
       return Result{TIME()};
     } else if (nt.metadata->tokenString[0] == "time_micro_utc") {
       return Result{TIME_MICRO_UTC()};
+    } else if (nt.metadata->tokenString[0] == "void") {
+      return Result{UNKNOWN()};
     }
     auto scalarType = createScalarType(nt.typeKind());
     VELOX_CHECK_NOT_NULL(
