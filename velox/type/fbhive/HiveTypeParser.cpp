@@ -77,6 +77,7 @@ HiveTypeParser::HiveTypeParser() {
   setupMetadata<TokenType::Comma, TypeKind::INVALID>(",");
   setupMetadata<TokenType::LeftRoundBracket, TypeKind::INVALID>("(");
   setupMetadata<TokenType::RightRoundBracket, TypeKind::INVALID>(")");
+  setupMetadata<TokenType::Void, TypeKind::UNKNOWN>("void");
   setupMetadata<TokenType::Number, TypeKind::INVALID>();
   setupMetadata<TokenType::Identifier, TypeKind::INVALID>();
   setupMetadata<TokenType::EndOfStream, TypeKind::INVALID>();
